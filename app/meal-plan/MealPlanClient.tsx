@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { buildPlanVersionMap, formatPlanLabel } from "@/lib/plans";
@@ -438,6 +438,7 @@ export default function MealPlanPage() {
   const [swappingSlotIds, setSwappingSlotIds] = useState<Set<string>>(new Set());
   const [openSearchForSlotId, setOpenSearchForSlotId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const loadedRecipeIdsRef = useRef<Set<number>>(new Set());
 
   // --- mapy ---
   const ingredientsById = useMemo(() => {
@@ -605,6 +606,89 @@ export default function MealPlanPage() {
       setSlots((s ?? []) as Slot[]);
     })();
   }, [selectedPlanId, supabase]);
+
+  useEffect(() => {
+    const neededRecipeIds = Array.from(
+      new Set(
+        slots
+          .map((s) => s.recipe_id)
+          .filter((id): id is number => typeof id === "number")
+          .map((id) => Number(id))
+      )
+    );
+
+    if (neededRecipeIds.length === 0) return;
+
+    const loadedRecipeIds = new Set<number>(loadedRecipeIdsRef.current);
+    for (const row of recipeIngs) loadedRecipeIds.add(Number(row.recipe_id));
+
+    const missingRecipeIds = neededRecipeIds.filter((id) => !loadedRecipeIds.has(id));
+    if (missingRecipeIds.length === 0) return;
+
+    (async () => {
+      const { data: ri, error: riErr } = await supabase
+        .from("recipe_ingredients")
+        .select("recipe_id,ingredient_id,amount,unit")
+        .in("recipe_id", missingRecipeIds);
+
+      if (riErr) {
+        console.error("load recipe_ingredients error", riErr);
+        return;
+      }
+
+      const newRows = (ri ?? []) as RecipeIngRow[];
+      for (const id of missingRecipeIds) loadedRecipeIdsRef.current.add(id);
+
+      if (newRows.length > 0) {
+        setRecipeIngs((prev) => {
+          const next = [...prev];
+          const seen = new Set<string>();
+          for (const row of prev) {
+            seen.add(`${row.recipe_id}|${row.ingredient_id}`);
+          }
+          for (const row of newRows) {
+            const key = `${row.recipe_id}|${row.ingredient_id}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            next.push(row);
+          }
+          return next;
+        });
+      }
+
+      const existingIngredientIds = new Set<number>(ingredients.map((i) => Number(i.id)));
+      const missingIngredientIds = Array.from(
+        new Set(newRows.map((row) => Number(row.ingredient_id)))
+      ).filter((id) => !existingIngredientIds.has(id));
+
+      if (missingIngredientIds.length === 0) return;
+
+      const { data: ingRows, error: ingErr } = await supabase
+        .from("ingredients")
+        .select("id,name,unit,category")
+        .in("id", missingIngredientIds);
+
+      if (ingErr) {
+        console.error("load ingredients error", ingErr);
+        return;
+      }
+
+      const newIngredients = (ingRows ?? []) as Ingredient[];
+      if (newIngredients.length === 0) return;
+
+      setIngredients((prev) => {
+        const next = [...prev];
+        const seen = new Set<number>(prev.map((i) => Number(i.id)));
+        for (const row of newIngredients) {
+          const id = Number(row.id);
+          if (seen.has(id)) continue;
+          seen.add(id);
+          next.push(row);
+        }
+        return next;
+      });
+    })();
+  }, [slots, recipeIngs, ingredients, supabase]);
 
   // plan labels dd.mm.yyyy_vN
   const planVersionById = useMemo(() => buildPlanVersionMap(allPlans), [allPlans]);
