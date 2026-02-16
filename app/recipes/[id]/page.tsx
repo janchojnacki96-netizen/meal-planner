@@ -15,8 +15,8 @@ type Recipe = {
 };
 
 type RecipeIngredientJoin = {
-  amount: number;
-  unit: string;
+  amount: number | null;
+  unit: string | null;
   ingredient: {
     id: number;
     name: string;
@@ -24,6 +24,26 @@ type RecipeIngredientJoin = {
     category: string | null;
   };
 };
+
+type RecipeIngredientJoinRaw = {
+  amount: number | null;
+  unit: string | null;
+  ingredient: RecipeIngredientJoin["ingredient"] | RecipeIngredientJoin["ingredient"][] | null;
+};
+
+function normalizeRecipeIngredients(rows: RecipeIngredientJoinRaw[]): RecipeIngredientJoin[] {
+  return rows
+    .map((row) => {
+      const ingredient = Array.isArray(row.ingredient) ? row.ingredient[0] : row.ingredient;
+      if (!ingredient) return null;
+      return {
+        amount: row.amount ?? null,
+        unit: row.unit ?? null,
+        ingredient,
+      };
+    })
+    .filter((row): row is RecipeIngredientJoin => row !== null);
+}
 
 export default function RecipeDetailsPage() {
   const supabase = createClient();
@@ -60,13 +80,15 @@ export default function RecipeDetailsPage() {
 
       const { data: ri, error: riErr } = await supabase
         .from("recipe_ingredients")
-        .select("amount,unit,ingredient:ingredients(id,name,unit,category)")
+        .select(
+          "amount,unit,ingredient:ingredients!recipe_ingredients_ingredient_id_fkey(id,name,unit,category)"
+        )
         .eq("recipe_id", recipeId);
 
       if (riErr) console.error(riErr);
 
       const recipeData = (r ?? null) as Recipe | null;
-      const itemsData = (ri ?? []) as RecipeIngredientJoin[];
+      const itemsData = normalizeRecipeIngredients((ri ?? []) as RecipeIngredientJoinRaw[]);
       setRecipe(recipeData);
       setItems(itemsData);
       setLoading(false);
