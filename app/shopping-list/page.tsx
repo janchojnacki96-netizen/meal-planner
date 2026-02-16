@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { PostgrestError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { buildPlanVersionMap, formatPlanLabel } from "@/lib/plans";
 
@@ -514,25 +513,24 @@ export default function ShoppingListPage() {
     const existingQty = existing?.quantity ?? 0;
     const newQty = existingQty + transferQty;
 
-    let writeErr: PostgrestError | null = null;
-
     if (existing) {
-      const { error } = await supabase
+      const { error: updateErr } = await supabase
         .from("user_pantry")
         .update({ quantity: newQty })
         .eq("user_id", userId)
         .eq("ingredient_id", ingredientId);
-      writeErr = error;
+      if (updateErr) {
+        logSupabaseError("addToPantry error", updateErr);
+        return false;
+      }
     } else {
-      const { error } = await supabase
+      const { error: insertErr } = await supabase
         .from("user_pantry")
         .insert({ user_id: userId, ingredient_id: ingredientId, quantity: newQty });
-      writeErr = error;
-    }
-
-    if (writeErr) {
-      logSupabaseError("addToPantry error", writeErr);
-      return false;
+      if (insertErr) {
+        logSupabaseError("addToPantry error", insertErr);
+        return false;
+      }
     }
 
     setPantry((prev) => {
