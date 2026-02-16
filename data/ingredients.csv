@@ -1,0 +1,131 @@
+id,name,unit,category
+1,jajka,szt,jaja
+2,maslo,g,tłuszcze
+3,pomidor,g,warzywa
+4,szczypiorek,g,warzywa
+5,sol,g,przyprawy
+6,pieprz,g,przyprawy
+7,platki owsiane,g,produkty zbozowe
+8,jablko,g,owoce
+9,cynamon,g,przyprawy
+10,miod,g,slodkie dodatki
+11,jogurt naturalny,g,nabial
+12,maliny,g,owoce
+13,nasiona chia,g,orzechy i nasiona
+14,mleko,ml,nabial
+15,banan,g,owoce
+16,maslo orzechowe,g,orzechy i nasiona
+17,chleb pelnoziarnisty,plastry,produkty zbozowe
+18,awokado,g,owoce
+19,sok z cytryny,ml,inne
+20,twarog poltlusty,g,nabial
+21,rzodkiewka,g,warzywa
+22,jogurt grecki,g,nabial
+23,proszek do pieczenia,g,inne
+24,maka pszenna,g,produkty zbozowe
+25,olej rzepakowy,ml,tłuszcze
+26,chleb tostowy,plastry,produkty zbozowe
+27,wanilia,g,przyprawy
+28,passata pomidorowa,ml,inne
+29,cebula,g,warzywa
+30,czosnek,g,warzywa
+31,papryka czerwona,g,warzywa
+32,kmin rzymski,g,przyprawy
+33,papryka slodka,g,przyprawy
+34,tortilla pelnoziarnista,szt,produkty zbozowe
+35,szynka,g,mieso
+36,ser zolty,g,nabial
+37,szpinak,g,warzywa
+38,mango,g,owoce
+39,kakao,g,przyprawy
+40,kasza jaglana,g,produkty zbozowe
+41,woda,ml,inne
+42,serek kanapkowy,g,nabial
+43,losos wedzony,g,ryby
+44,koperek,g,warzywa
+45,ogorek,g,warzywa
+46,ser feta,g,nabial
+47,rukola,g,warzywa
+48,rodzynki,g,slodkie dodatki
+49,kasza manna,g,produkty zbozowe
+50,truskawki,g,owoce
+51,tofu naturalne,g,inne
+52,kurkuma,g,przyprawy
+53,borowki,g,owoce
+54,ocet,ml,inne
+55,skyr,g,nabial
+56,granola,g,produkty zbozowe
+57,pieczarki,g,warzywa
+58,natka pietruszki,g,warzywa
+59,kefir,ml,nabial
+60,hummus,g,inne
+61,kasza gryczana,g,produkty zbozowe
+62,pesto bazyliowe,g,inne
+63,mozzarella,g,nabial
+64,ogorek kiszony,g,warzywa
+65,ryz bialy,g,produkty zbozowe
+66,gruszka,g,owoce
+67,orzechy wloskie,g,orzechy i nasiona
+68,serek wiejski,g,nabial
+69,pestki dyni,g,orzechy i nasiona
+70,boczek wedzony,g,mieso
+71,suszone pomidory,g,warzywa
+72,tunczyk w sosie wlasnym,g,ryby
+73,kukurydza konserwowa,g,warzywa
+74,kiwi,g,owoce
+75,ser ricotta,g,nabial
+76,ziemniaki,g,warzywa
+77,batat,g,warzywa
+78,mleko kokosowe,ml,inne
+79,wiorki kokosowe,g,slodkie dodatki
+80,mak,g,slodkie dodatki
+81,dzem truskawkowy,g,slodkie dodatki
+82,pstrag wedzony,g,ryby
+83,burak gotowany,g,warzywa
+84,mascarpone,g,nabial
+85,kozi ser,g,nabial
+86,oliwki,g,warzywa
+87,jablko suszone,g,slodkie dodatki
+88,kawa espresso,ml,inne
+89,kasza kuskus,g,produkty zbozowe
+90,fasola czerwona konserwowa,g,warzywa
+91,piers z kurczaka,g,mieso
+92,filet z indyka,g,mieso
+93,mieso mielone,g,mieso
+94,makaron spaghetti,g,produkty zbozowe
+95,makaron penne,g,produkty zbozowe
+96,makaron nitki,g,produkty zbozowe
+97,parmezan,g,nabial
+98,smietanka 30,ml,nabial
+99,bulion warzywny,ml,inne
+100,brokul,g,warzywa
+101,marchew,g,warzywa
+102,groszek mrozony,g,warzywa
+103,sos sojowy,ml,inne
+104,imbir,g,przyprawy
+105,sezam,g,orzechy i nasiona
+106,kielbasa,g,mieso
+107,soczewica czerwona,g,warzywa
+108,pomidory krojone z puszki,g,inne
+109,chili mielone,g,przyprawy
+110,ciecierzyca konserwowa,g,warzywa
+111,dynia,g,warzywa
+112,filet z lososia,g,ryby
+113,dorsz,g,ryby
+114,quinoa,g,produkty zbozowe
+115,makaron ryzowy,g,produkty zbozowe
+116,kapusta kiszona,g,warzywa
+117,koncentrat pomidorowy,g,inne
+118,fasola biala konserwowa,g,warzywa
+119,ziola prowansalskie,g,przyprawy
+120,oregano suszone,g,przyprawy
+121,bazylia suszona,g,przyprawy
+122,cukinia,g,warzywa
+123,kapusta biala,g,warzywa
+124,oliwa z oliwek,ml,tłuszcze
+125,kalafior,g,warzywa
+126,baklazan,g,warzywa
+127,fasolka szparagowa mrozona,g,warzywa
+128,ryz basmati,g,produkty zbozowe
+129,kasza bulgur,g,produkty zbozowe
+130,makaron tagliatelle,g,produkty zbozowe
