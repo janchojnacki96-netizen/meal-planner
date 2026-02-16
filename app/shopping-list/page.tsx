@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { buildPlanVersionMap, formatPlanLabel } from "@/lib/plans";
 
@@ -513,7 +514,7 @@ export default function ShoppingListPage() {
     const existingQty = existing?.quantity ?? 0;
     const newQty = existingQty + transferQty;
 
-    let writeErr: typeof fetchErr | null = null;
+    let writeErr: PostgrestError | null = null;
 
     if (existing) {
       const { error } = await supabase
