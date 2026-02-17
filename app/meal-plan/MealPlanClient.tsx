@@ -29,6 +29,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import {
   Ban,
@@ -523,6 +533,7 @@ export default function MealPlanPage() {
   const [openSearchForSlotId, setOpenSearchForSlotId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [plansDrawerOpen, setPlansDrawerOpen] = useState(false);
+  const [deletePlanDialogId, setDeletePlanDialogId] = useState<string | null>(null);
   const [undoBusy, setUndoBusy] = useState(false);
   const [undoCount, setUndoCount] = useState(0);
   const loadedRecipeIdsRef = useRef<Set<number>>(new Set());
@@ -1600,6 +1611,12 @@ export default function MealPlanPage() {
     [slots]
   );
 
+  const deletePlanName = (() => {
+    if (!deletePlanDialogId) return "";
+    const found = allPlans.find((pl) => pl.id === deletePlanDialogId);
+    return found ? planLabel(found) : deletePlanDialogId;
+  })();
+
   function goToPlan(planId: string) {
     setSelectedPlanId(planId);
     router.push(`/meal-plan?plan=${planId}`);
@@ -1607,12 +1624,6 @@ export default function MealPlanPage() {
 
   // --- DELETE PLAN ---
   async function deletePlan(planId: string) {
-    const pl = allPlans.find((x) => x.id === planId);
-    const name = pl ? planLabel(pl) : planId;
-
-    const ok = window.confirm(`Czy na pewno chcesz usunąć plan: ${name}?\n\nTo usunie też wszystkie sloty planu.`);
-    if (!ok) return;
-
     // usuń sloty, potem plan
     const { error: sErr } = await supabase.from("meal_plan_slots").delete().eq("meal_plan_id", planId);
     if (sErr) {
@@ -2098,7 +2109,7 @@ export default function MealPlanPage() {
                       <DropdownMenuItem
                         onClick={(e) => {
                           e.preventDefault();
-                          deletePlan(pl.id);
+                          setDeletePlanDialogId(pl.id);
                         }}
                         className="text-rose-600 focus:text-rose-600"
                       >
@@ -2420,6 +2431,30 @@ export default function MealPlanPage() {
           <div className="mt-4">{plansPanel}</div>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={deletePlanDialogId !== null} onOpenChange={(open) => !open && setDeletePlanDialogId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć plan?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Czy na pewno chcesz usunąć plan: <b>{deletePlanName}</b>? To usunie też wszystkie sloty planu.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!deletePlanDialogId) return;
+                void deletePlan(deletePlanDialogId);
+                setDeletePlanDialogId(null);
+              }}
+              className="bg-rose-600 hover:bg-rose-500"
+            >
+              Usuń plan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }

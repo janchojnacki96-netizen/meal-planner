@@ -1,10 +1,15 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { buildPlanVersionMap, formatPlanLabel } from "@/lib/plans";
 import MobileDrawer from "@/components/MobileDrawer";
+import { useBottomNavAction } from "@/components/BottomNavActionContext";
+import { Button } from "@/components/ui/button";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
+import { Minus, Plus, Search, Trash2 } from "lucide-react";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 
@@ -73,17 +78,51 @@ type ComputedItem = {
   toBuy: number;
 };
 
-function safeNumber(v: string): number | null {
-  const t = v.trim().replace(",", ".");
-  if (!t) return null;
-  const n = Number(t);
-  if (!Number.isFinite(n)) return null;
-  return n;
-}
+type UndoAction =
+  | {
+      type: "qty";
+      ingredientId: number;
+      prevQty: number;
+      nextQty: number;
+      prevDone: boolean;
+      nextDone: boolean;
+    }
+  | {
+      type: "extraAdd";
+      extra: ExtraRow;
+    }
+  | {
+      type: "pantryTransfer";
+      changes: Array<{
+        ingredientId: number;
+        prevQty: number | null;
+        nextQty: number | null;
+        hadRowBefore: boolean;
+      }>;
+    };
+
+type PantryTransferChange = {
+  ingredientId: number;
+  prevQty: number | null;
+  nextQty: number | null;
+  hadRowBefore: boolean;
+};
 
 function fmtQty(n: number): string {
   const s = (Math.round(n * 100) / 100).toFixed(2);
   return s.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+}
+
+function parseIntQty(raw: string): number | null {
+  const t = raw.trim();
+  if (!t) return null;
+  if (!/^\d+$/.test(t)) return null;
+  return Number.parseInt(t, 10);
+}
+
+function qtyStepByUnit(unit: string): number {
+  const normalized = unit.trim().toLowerCase();
+  return normalized === "g" || normalized === "ml" ? 50 : 1;
 }
 
 function logSupabaseError(
@@ -103,6 +142,7 @@ function logSupabaseError(
 export default function ShoppingListPage() {
   const supabase = createClient();
   const router = useRouter();
+  const { setBottomNavAction } = useBottomNavAction();
 
   const [initialLoading, setInitialLoading] = useState(true);
   const [planLoading, setPlanLoading] = useState(false);
@@ -130,13 +170,20 @@ export default function ShoppingListPage() {
   // extra (ręczne)
   const [extras, setExtras] = useState<ExtraRow[]>([]);
   const [extraName, setExtraName] = useState("");
+  const [extraSuggestOpen, setExtraSuggestOpen] = useState(false);
+  const [listSearch, setListSearch] = useState("");
   const [bulkTransferBusy, setBulkTransferBusy] = useState(false);
   const [bulkExtrasBusy, setBulkExtrasBusy] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
+  const [undoBusy, setUndoBusy] = useState(false);
+  const [undoCount, setUndoCount] = useState(0);
+  const [confirmTransferOpen, setConfirmTransferOpen] = useState(false);
+  const [confirmDeleteExtrasOpen, setConfirmDeleteExtrasOpen] = useState(false);
 
   // UI
   const [hideZero, setHideZero] = useState(true);
   const [plansDrawerOpen, setPlansDrawerOpen] = useState(false);
+  const undoStackRef = useRef<UndoAction[]>([]);
 
   const loading = initialLoading || planLoading;
   const selectedPlanIdsArray = useMemo(() => Array.from(selectedPlanIds), [selectedPlanIds]);
@@ -144,6 +191,12 @@ export default function ShoppingListPage() {
 
   function planLabel(pl: MealPlan): string {
     return formatPlanLabel(pl, planVersionById);
+  }
+
+  function pushUndo(action: UndoAction) {
+    const next = [...undoStackRef.current, action];
+    undoStackRef.current = next.slice(-30);
+    setUndoCount(undoStackRef.current.length);
   }
 
   useEffect(() => {
@@ -446,10 +499,10 @@ export default function ShoppingListPage() {
 
   const bulkTransferLabel = bulkTransferBusy
     ? bulkProgress
-      ? `Przenoszę... (${bulkProgress.current}/${bulkProgress.total})`
-      : "Przenoszę..."
+      ? `Przenoszę… (${bulkProgress.current}/${bulkProgress.total})`
+      : "Przenoszę…"
     : "Przenieś całą listę do pantry";
-  const bulkExtrasLabel = bulkExtrasBusy ? "Usuwanie..." : "Usuń wszystkie dodatki";
+  const bulkExtrasLabel = bulkExtrasBusy ? "Usuwanie…" : "Usuń wszystkie dodatki";
 
   function getDone(ingredientId: number): boolean {
     return shoppingState.get(ingredientId)?.done ?? false;
@@ -458,15 +511,56 @@ export default function ShoppingListPage() {
   function getQtyInput(ingredientId: number, fallback: number): string {
     const v = inputQty.get(ingredientId);
     if (v !== undefined) return v;
-    return fallback > 0 ? fmtQty(fallback) : "";
+    return String(Math.max(0, Math.round(fallback)));
   }
 
-  async function upsertShoppingState(
+  const getDefaultQty = useCallback((item: ComputedItem): number => {
+    const state = shoppingState.get(item.ingredient_id);
+    if (state?.done) return Math.max(0, Math.round(item.toBuy));
+    const saved = state?.purchased_qty;
+    if (typeof saved === "number" && Number.isFinite(saved)) return Math.max(0, Math.round(saved));
+    return Math.max(0, Math.round(item.toBuy));
+  }, [shoppingState]);
+
+  const effectiveQtyById = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const item of computedItems) {
+      const raw = inputQty.get(item.ingredient_id);
+      if (raw === undefined || raw.trim() === "") {
+        map.set(item.ingredient_id, getDefaultQty(item));
+        continue;
+      }
+      const parsed = parseIntQty(raw);
+      if (parsed === null) {
+        map.set(item.ingredient_id, getDefaultQty(item));
+      } else {
+        map.set(item.ingredient_id, Math.max(0, parsed));
+      }
+    }
+    return map;
+  }, [computedItems, getDefaultQty, inputQty]);
+
+  const listFilterNormalized = listSearch.trim().toLowerCase();
+
+  const filteredExtras = useMemo(() => {
+    if (!listFilterNormalized) return extras;
+    return extras.filter((x) => x.name.toLowerCase().includes(listFilterNormalized));
+  }, [extras, listFilterNormalized]);
+
+  const extraSuggestions = useMemo(() => {
+    const q = extraName.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return ingredients
+      .filter((ing) => ing.name.toLowerCase().includes(q))
+      .slice(0, 10);
+  }, [extraName, ingredients]);
+
+  const upsertShoppingState = useCallback(async (
     planId: string,
     ingredientId: number,
     done: boolean,
     purchasedQty: number | null
-  ): Promise<boolean> {
+  ): Promise<boolean> => {
     if (!userId) return false;
 
     const { error } = await supabase.from("user_shopping_state").upsert(
@@ -493,11 +587,124 @@ export default function ShoppingListPage() {
     }
 
     return true;
+  }, [supabase, userId]);
+
+  function setQtyInputValue(ingredientId: number, value: string | null) {
+    setInputQty((prev) => {
+      const next = new Map(prev);
+      if (value === null) next.delete(ingredientId);
+      else next.set(ingredientId, value);
+      return next;
+    });
   }
 
-  async function addToPantry(ingredientId: number, transferQty: number): Promise<boolean> {
-    if (!userId) return false;
-    if (!Number.isFinite(transferQty) || transferQty <= 0) return false;
+  const persistIngredientState = useCallback(async (ingredientId: number, qty: number, done: boolean): Promise<boolean> => {
+    const planIds = selectedPlanIdsArray;
+    if (planIds.length === 0) return false;
+
+    const perPlanQty = qty / planIds.length;
+    const results = await Promise.all(
+      planIds.map((planId) => upsertShoppingState(planId, ingredientId, done, perPlanQty))
+    );
+    return results.every(Boolean);
+  }, [selectedPlanIdsArray, upsertShoppingState]);
+
+  async function applyIngredientQtyChange(
+    ingredientId: number,
+    nextQty: number,
+    options?: { doneOverride?: boolean; pushUndo?: boolean }
+  ): Promise<boolean> {
+    const prevRow = shoppingState.get(ingredientId);
+    const prevDone = prevRow?.done ?? false;
+    const prevQty = effectiveQtyById.get(ingredientId) ?? Math.max(0, Math.round(toBuyById.get(ingredientId) ?? 0));
+
+    const normalized = Math.max(0, Math.round(nextQty));
+    const nextDone = options?.doneOverride ?? prevDone;
+
+    if (normalized === prevQty && nextDone === prevDone) {
+      setQtyInputValue(ingredientId, String(normalized));
+      return true;
+    }
+
+    setBusyIds((prev) => new Set(prev).add(ingredientId));
+    setQtyInputValue(ingredientId, String(normalized));
+    setShoppingState((prev) => {
+      const next = new Map(prev);
+      next.set(ingredientId, { ingredient_id: ingredientId, done: nextDone, purchased_qty: normalized });
+      return next;
+    });
+
+    try {
+      const ok = await persistIngredientState(ingredientId, normalized, nextDone);
+      if (!ok) {
+        setShoppingState((prev) => {
+          const next = new Map(prev);
+          if (prevRow) next.set(ingredientId, prevRow);
+          else next.delete(ingredientId);
+          return next;
+        });
+        if (typeof prevRow?.purchased_qty === "number" && Number.isFinite(prevRow.purchased_qty)) {
+          setQtyInputValue(ingredientId, String(Math.max(0, Math.round(prevRow.purchased_qty))));
+        } else {
+          setQtyInputValue(ingredientId, null);
+        }
+        toast.error("Nie udało się zapisać ilości.");
+        return false;
+      }
+
+      if (options?.pushUndo !== false) {
+        pushUndo({
+          type: "qty",
+          ingredientId,
+          prevQty,
+          nextQty: normalized,
+          prevDone,
+          nextDone,
+        });
+      }
+      return true;
+    } finally {
+      setBusyIds((prev) => {
+        const next = new Set(prev);
+        next.delete(ingredientId);
+        return next;
+      });
+    }
+  }
+
+  async function commitQtyInput(item: ComputedItem) {
+    const ingredientId = item.ingredient_id;
+    const raw = inputQty.get(ingredientId);
+    const fallback = getDefaultQty(item);
+
+    if (raw === undefined || raw.trim() === "") {
+      setQtyInputValue(ingredientId, String(fallback));
+      return;
+    }
+
+    const parsed = parseIntQty(raw);
+    if (parsed === null) {
+      setQtyInputValue(ingredientId, String(fallback));
+      return;
+    }
+
+    await applyIngredientQtyChange(ingredientId, parsed);
+  }
+
+  async function adjustQtyByStep(item: ComputedItem, direction: "minus" | "plus") {
+    const current = effectiveQtyById.get(item.ingredient_id) ?? getDefaultQty(item);
+    const step = qtyStepByUnit(item.unit);
+    const delta = direction === "plus" ? step : -step;
+    await applyIngredientQtyChange(item.ingredient_id, current + delta);
+  }
+
+  async function markItemAsRemoved(item: ComputedItem) {
+    await applyIngredientQtyChange(item.ingredient_id, 0);
+  }
+
+  async function addToPantry(ingredientId: number, transferQty: number): Promise<PantryTransferChange | null> {
+    if (!userId) return null;
+    if (!Number.isFinite(transferQty) || transferQty <= 0) return null;
 
     const { data: existingRows, error: fetchErr } = await supabase
       .from("user_pantry")
@@ -508,40 +715,41 @@ export default function ShoppingListPage() {
 
     if (fetchErr) {
       logSupabaseError("addToPantry error", fetchErr);
-      return false;
+      return null;
     }
 
     const existing = (existingRows ?? [])[0] as PantryRow | undefined;
-    const existingQty = existing?.quantity ?? 0;
-    const newQty = existingQty + transferQty;
+    const hadRowBefore = Boolean(existing);
+    const prevQty = hadRowBefore ? (existing?.quantity ?? null) : null;
+    const nextQty = (prevQty ?? 0) + transferQty;
 
     if (existing) {
       const { error: updateErr } = await supabase
         .from("user_pantry")
-        .update({ quantity: newQty })
+        .update({ quantity: nextQty })
         .eq("user_id", userId)
         .eq("ingredient_id", ingredientId);
       if (updateErr) {
         logSupabaseError("addToPantry error", updateErr);
-        return false;
+        return null;
       }
     } else {
       const { error: insertErr } = await supabase
         .from("user_pantry")
-        .insert({ user_id: userId, ingredient_id: ingredientId, quantity: newQty });
+        .insert({ user_id: userId, ingredient_id: ingredientId, quantity: nextQty });
       if (insertErr) {
         logSupabaseError("addToPantry error", insertErr);
-        return false;
+        return null;
       }
     }
 
     setPantry((prev) => {
       const next = new Map(prev);
-      next.set(ingredientId, { ingredient_id: ingredientId, quantity: newQty });
+      next.set(ingredientId, { ingredient_id: ingredientId, quantity: nextQty });
       return next;
     });
 
-    return true;
+    return { ingredientId, prevQty, nextQty, hadRowBefore };
   }
 
   async function toggleBoughtAndTransfer(
@@ -557,20 +765,33 @@ export default function ShoppingListPage() {
     setBusyIds((prev) => new Set(prev).add(ingredientId));
 
     try {
-      const transferQty = purchasedQty ?? (toBuyById.get(ingredientId) ?? 0);
-      const perPlanQty = purchasedQty === null ? null : purchasedQty / planIds.length;
+      const fallbackQty = effectiveQtyById.get(ingredientId) ?? Math.max(0, Math.round(toBuyById.get(ingredientId) ?? 0));
+      const normalizedQty = purchasedQty === null ? fallbackQty : Math.max(0, Math.round(purchasedQty));
+
+      const perPlanQty = normalizedQty / planIds.length;
       const results = await Promise.all(
         planIds.map((planId) => upsertShoppingState(planId, ingredientId, done, perPlanQty))
       );
-      if (results.some((ok) => !ok)) return;
+      if (results.some((ok) => !ok)) {
+        toast.error("Nie udało się zaktualizować pozycji.");
+        return;
+      }
 
       setShoppingState((prev) => {
         const next = new Map(prev);
-        next.set(ingredientId, { ingredient_id: ingredientId, done, purchased_qty: purchasedQty });
+        next.set(ingredientId, { ingredient_id: ingredientId, done, purchased_qty: normalizedQty });
         return next;
       });
 
-      if (done && transferQty > 0) await addToPantry(ingredientId, transferQty);
+      if (done && normalizedQty > 0) {
+        const change = await addToPantry(ingredientId, normalizedQty);
+        if (!change) {
+          toast.error("Nie udało się przenieść produktu do pantry.");
+          return;
+        }
+        pushUndo({ type: "pantryTransfer", changes: [change] });
+        setQtyInputValue(ingredientId, null);
+      }
     } finally {
       setBusyIds((prev) => {
         const next = new Set(prev);
@@ -580,68 +801,100 @@ export default function ShoppingListPage() {
     }
   }
 
-  async function addExtra() {
-    if (!plan || !userId) return;
-    const name = extraName.trim();
-    if (!name) return;
-
-    setExtraName("");
+  async function addExtraByName(nameRaw: string, pushUndoAction = true) {
+    if (!plan || !userId) return false;
+    const name = nameRaw.trim();
+    if (!name) return false;
 
     const { data, error } = await supabase
       .from("user_shopping_extras")
-      .insert({ user_id: userId, meal_plan_id: plan.id, name }) // <-- KLUCZ FIX
+      .insert({ user_id: userId, meal_plan_id: plan.id, name })
       .select("id,name,done,meal_plan_id")
       .single();
 
     if (error) {
-      console.error(error);
-      alert("Nie udało się dodać produktu (sprawdź RLS / tabelę user_shopping_extras).");
-      return;
+      logSupabaseError("addExtra error", error);
+      toast.error(error.message ?? "Nie udało się dodać produktu.");
+      return false;
     }
 
-    setExtras((prev) => [data as ExtraRow, ...prev]);
+    const extra = data as ExtraRow;
+    setExtras((prev) => [extra, ...prev]);
+    if (pushUndoAction) pushUndo({ type: "extraAdd", extra });
+    return true;
+  }
+
+  async function addExtra() {
+    const ok = await addExtraByName(extraName);
+    if (!ok) return;
+    setExtraName("");
+    setExtraSuggestOpen(false);
   }
 
   async function toggleExtraDone(extraId: string, done: boolean) {
     setExtras((prev) => prev.map((x) => (x.id === extraId ? { ...x, done } : x)));
     const { error } = await supabase.from("user_shopping_extras").update({ done }).eq("id", extraId);
-    if (error) console.error(error);
+    if (error) logSupabaseError("toggleExtraDone error", error);
   }
 
   async function deleteExtra(extraId: string) {
     setExtras((prev) => prev.filter((x) => x.id !== extraId));
     const { error } = await supabase.from("user_shopping_extras").delete().eq("id", extraId);
-    if (error) console.error(error);
+    if (error) logSupabaseError("deleteExtra error", error);
   }
 
   async function transferAllToPantry() {
     if (!userId) return;
     if (bulkTransferBusy) return;
 
-    const itemsToTransfer = computedItems.filter((item) => item.toBuy > 0);
-    if (itemsToTransfer.length === 0) return;
-    if (!confirm("Na pewno przenieść całą listę do pantry?")) return;
+    const itemsToTransfer = computedItems
+      .map((item) => ({
+        ingredientId: item.ingredient_id,
+        qty: effectiveQtyById.get(item.ingredient_id) ?? getDefaultQty(item),
+      }))
+      .filter((item) => item.qty > 0);
+
+    if (itemsToTransfer.length === 0) {
+      toast.info("Brak pozycji do przeniesienia.");
+      return;
+    }
 
     setBulkTransferBusy(true);
     setBulkProgress({ current: 0, total: itemsToTransfer.length });
 
     try {
       let current = 0;
+      const changes: PantryTransferChange[] = [];
 
       for (const item of itemsToTransfer) {
-        const ok = await addToPantry(item.ingredient_id, item.toBuy);
-        if (!ok) {
-          alert("Nie udało się przenieść listy do pantry.");
+        const change = await addToPantry(item.ingredientId, item.qty);
+        if (!change) {
+          toast.error("Nie udało się przenieść całej listy do pantry.");
           return;
         }
+        changes.push(change);
+
+        setShoppingState((prev) => {
+          const next = new Map(prev);
+          const prevRow = next.get(item.ingredientId);
+          next.set(item.ingredientId, {
+            ingredient_id: item.ingredientId,
+            done: prevRow?.done ?? true,
+            purchased_qty: item.qty,
+          });
+          return next;
+        });
+        setQtyInputValue(item.ingredientId, null);
 
         current += 1;
         setBulkProgress({ current, total: itemsToTransfer.length });
       }
 
+      pushUndo({ type: "pantryTransfer", changes });
+      toast.success("Przeniesiono całą listę do pantry.");
+
       if (extras.length > 0) {
-        const shouldClearExtras = confirm("Na pewno usunąć wszystkie dodatkowe produkty?");
-        if (shouldClearExtras) await deleteAllExtras(true);
+        setConfirmDeleteExtrasOpen(true);
       }
     } finally {
       setBulkTransferBusy(false);
@@ -649,55 +902,150 @@ export default function ShoppingListPage() {
     }
   }
 
-  async function deleteAllExtras(skipConfirm = false): Promise<boolean> {
+  async function deleteAllExtras(): Promise<boolean> {
     if (!userId) return false;
-    if (!skipConfirm && !confirm("Na pewno usunąć wszystkie dodatkowe produkty?")) return false;
 
     setBulkExtrasBusy(true);
     try {
       const { error } = await supabase.from("user_shopping_extras").delete().eq("user_id", userId);
       if (error) {
-        console.error(error);
-        alert(error.message ?? "Nie udało się usunąć dodatków.");
+        logSupabaseError("deleteAllExtras error", error);
+        toast.error(error.message ?? "Nie udało się usunąć dodatków.");
         return false;
       }
       setExtras([]);
+      toast.success("Usunięto wszystkie dodatki.");
       return true;
     } finally {
       setBulkExtrasBusy(false);
     }
   }
 
+  const handleUndo = useCallback(async () => {
+    if (undoBusy) return;
+    if (!userId) return;
+
+    const last = undoStackRef.current[undoStackRef.current.length - 1];
+    if (!last) return;
+
+    undoStackRef.current = undoStackRef.current.slice(0, -1);
+    setUndoCount(undoStackRef.current.length);
+    setUndoBusy(true);
+
+    try {
+      if (last.type === "qty") {
+        const ok = await persistIngredientState(last.ingredientId, last.prevQty, last.prevDone);
+        if (!ok) throw new Error("Nie udało się cofnąć zmiany ilości.");
+
+        setShoppingState((prev) => {
+          const next = new Map(prev);
+          next.set(last.ingredientId, {
+            ingredient_id: last.ingredientId,
+            done: last.prevDone,
+            purchased_qty: last.prevQty,
+          });
+          return next;
+        });
+        setQtyInputValue(last.ingredientId, String(last.prevQty));
+        toast.success("Cofnięto zmianę ilości.");
+      }
+
+      if (last.type === "extraAdd") {
+        const { error } = await supabase.from("user_shopping_extras").delete().eq("id", last.extra.id);
+        if (error) throw new Error(error.message);
+        setExtras((prev) => prev.filter((x) => x.id !== last.extra.id));
+        toast.success("Cofnięto dodanie dodatkowego produktu.");
+      }
+
+      if (last.type === "pantryTransfer") {
+        for (const change of last.changes) {
+          if (change.hadRowBefore) {
+            const { error } = await supabase
+              .from("user_pantry")
+              .update({ quantity: change.prevQty })
+              .eq("user_id", userId)
+              .eq("ingredient_id", change.ingredientId);
+            if (error) throw new Error(error.message);
+          } else {
+            const { error } = await supabase
+              .from("user_pantry")
+              .delete()
+              .eq("user_id", userId)
+              .eq("ingredient_id", change.ingredientId);
+            if (error) throw new Error(error.message);
+          }
+        }
+
+        setPantry((prev) => {
+          const next = new Map(prev);
+          for (const change of last.changes) {
+            if (change.hadRowBefore) {
+              next.set(change.ingredientId, {
+                ingredient_id: change.ingredientId,
+                quantity: change.prevQty,
+              });
+            } else {
+              next.delete(change.ingredientId);
+            }
+          }
+          return next;
+        });
+        toast.success("Cofnięto przeniesienie do pantry.");
+      }
+    } catch (error) {
+      undoStackRef.current = [...undoStackRef.current, last].slice(-30);
+      setUndoCount(undoStackRef.current.length);
+      const message = error instanceof Error ? error.message : "Nie udało się cofnąć operacji.";
+      toast.error(message);
+    } finally {
+      setUndoBusy(false);
+    }
+  }, [persistIngredientState, supabase, undoBusy, userId]);
+
+  useEffect(() => {
+    setBottomNavAction({
+      label: undoBusy ? "Cofam…" : "Cofnij",
+      disabled: undoBusy || undoCount === 0,
+      onClick: () => {
+        void handleUndo();
+      },
+    });
+    return () => setBottomNavAction(null);
+  }, [handleUndo, setBottomNavAction, undoBusy, undoCount]);
+
   const bulkActionButtons = (
     <>
-      <button
+      <Button
         onClick={() => setSelectedPlanIds(new Set(allPlans.map((pl) => pl.id)))}
         disabled={allPlans.length === 0 || selectedPlanIds.size === allPlans.length}
-        className="btn btn-secondary text-xs"
+        variant="secondary"
+        size="sm"
       >
         Zaznacz wszystkie
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={() => setSelectedPlanIds(new Set())}
         disabled={selectedPlanIds.size === 0}
-        className="btn btn-secondary text-xs"
+        variant="secondary"
+        size="sm"
       >
         Wyczyść
-      </button>
-      <button
-        onClick={transferAllToPantry}
+      </Button>
+      <Button
+        onClick={() => setConfirmTransferOpen(true)}
         disabled={computedItems.length === 0 || bulkTransferBusy}
-        className="btn btn-primary text-xs"
+        size="sm"
       >
         {bulkTransferLabel}
-      </button>
-      <button
-        onClick={() => deleteAllExtras()}
+      </Button>
+      <Button
+        onClick={() => setConfirmDeleteExtrasOpen(true)}
         disabled={extras.length === 0 || bulkExtrasBusy}
-        className="btn btn-secondary text-xs"
+        variant="secondary"
+        size="sm"
       >
         {bulkExtrasLabel}
-      </button>
+      </Button>
     </>
   );
 
@@ -773,9 +1121,9 @@ export default function ShoppingListPage() {
                 </p>
               )}
             </div>
-            <button onClick={() => setPlansDrawerOpen(true)} className="btn btn-secondary lg:hidden">
+            <Button onClick={() => setPlansDrawerOpen(true)} variant="secondary" className="lg:hidden">
               Wybierz plany
-            </button>
+            </Button>
           </header>
 
           {loadError && (
@@ -799,6 +1147,19 @@ export default function ShoppingListPage() {
             </p>
           </section>
 
+          <section className="card space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Szukaj na liście</label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={listSearch}
+                onChange={(e) => setListSearch(e.target.value)}
+                placeholder="Szukaj na liście…"
+                className="input pl-9"
+              />
+            </div>
+          </section>
+
           <section className="space-y-4">
             {selectedPlanIds.size === 0 ? (
               <p className="text-sm text-slate-600">Zaznacz co najmniej 1 plan.</p>
@@ -809,7 +1170,12 @@ export default function ShoppingListPage() {
             ) : (
               computed.categories.map((cat) => {
                 const items = computed.grouped.get(cat) ?? [];
-                const visible = hideZero ? items.filter((x) => x.toBuy > 0) : items;
+                const visible = items.filter((it) => {
+                  const qty = effectiveQtyById.get(it.ingredient_id) ?? getDefaultQty(it);
+                  if (hideZero && qty <= 0) return false;
+                  if (listFilterNormalized && !it.name.toLowerCase().includes(listFilterNormalized)) return false;
+                  return true;
+                });
                 if (visible.length === 0) return null;
 
                 return (
@@ -823,8 +1189,10 @@ export default function ShoppingListPage() {
                       {visible.map((it) => {
                         const done = getDone(it.ingredient_id);
                         const disabled = busyIds.has(it.ingredient_id);
+                        const effectiveQty = effectiveQtyById.get(it.ingredient_id) ?? getDefaultQty(it);
+                        const isRemoved = effectiveQty <= 0;
 
-                        const qtyStr = getQtyInput(it.ingredient_id, it.toBuy);
+                        const qtyStr = getQtyInput(it.ingredient_id, effectiveQty);
                         const currentInput = inputQty.get(it.ingredient_id) ?? qtyStr;
 
                         const pantryFlag =
@@ -837,7 +1205,9 @@ export default function ShoppingListPage() {
                         return (
                           <div
                             key={it.ingredient_id}
-                            className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                            className={`flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 ${
+                              isRemoved ? "opacity-50" : ""
+                            }`}
                           >
                             <label className="flex flex-1 items-start gap-3 text-sm">
                               <input
@@ -846,66 +1216,123 @@ export default function ShoppingListPage() {
                                 disabled={disabled}
                                 onChange={(e) => {
                                   const checked = e.target.checked;
-                                  const qty = safeNumber((inputQty.get(it.ingredient_id) ?? qtyStr) || "");
+                                  const qty = parseIntQty((inputQty.get(it.ingredient_id) ?? qtyStr) || "");
                                   toggleBoughtAndTransfer(it.ingredient_id, checked, qty);
                                 }}
                                 className="mt-1 h-4 w-4"
                               />
                               <div className="space-y-1">
-                                <div className="font-semibold text-slate-900">
+                                <div className={`font-semibold text-slate-900 ${isRemoved ? "line-through" : ""}`}>
                                   {it.name} <span className="text-xs text-slate-400">#{it.ingredient_id}</span>
                                 </div>
                                 <div className="text-xs text-slate-500">
                                   potrzebne: <b className="text-slate-900">{fmtQty(it.needed)}</b> {it.unit} • {pantryFlag}
                                 </div>
                                 <div className="text-xs text-slate-500">
-                                  do kupienia: <b className="text-slate-900">{fmtQty(it.toBuy)}</b> {it.unit}
+                                  do kupienia: <b className="text-slate-900">{fmtQty(effectiveQty)}</b> {it.unit}
                                 </div>
                               </div>
                             </label>
 
-                            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[11px] uppercase tracking-wide text-slate-400">Ilość do pantry</span>
-                                <input
-                                  value={currentInput}
-                                  disabled={disabled}
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    setInputQty((prev) => {
-                                      const next = new Map(prev);
-                                      next.set(it.ingredient_id, v);
-                                      return next;
-                                    });
-                                  }}
-                                  placeholder={it.toBuy > 0 ? fmtQty(it.toBuy) : ""}
-                                  className="input w-full sm:w-32"
-                                />
+                            <div className="grid gap-2 sm:grid-cols-[auto_auto_auto] sm:items-end">
+                              <div className="flex flex-col gap-1 sm:min-w-[210px]">
+                                <span className="text-[11px] uppercase tracking-wide text-slate-400">Ilość do pantry/listy</span>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="icon"
+                                    disabled={disabled}
+                                    onClick={() => {
+                                      void adjustQtyByStep(it, "minus");
+                                    }}
+                                    aria-label={`Zmniejsz ilość ${it.name}`}
+                                    className="h-11 w-11"
+                                  >
+                                    <Minus className="h-4 w-4" />
+                                  </Button>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={1}
+                                    inputMode="numeric"
+                                    value={currentInput}
+                                    disabled={disabled}
+                                    onChange={(e) => {
+                                      const clean = e.target.value.replace(/[^\d]/g, "");
+                                      setQtyInputValue(it.ingredient_id, clean);
+                                    }}
+                                    onBlur={() => {
+                                      void commitQtyInput(it);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        void commitQtyInput(it);
+                                      }
+                                    }}
+                                    className="input h-11 text-center"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="icon"
+                                    disabled={disabled}
+                                    onClick={() => {
+                                      void adjustQtyByStep(it, "plus");
+                                    }}
+                                    aria-label={`Zwiększ ilość ${it.name}`}
+                                    className="h-11 w-11"
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                                <span className="text-[11px] text-slate-400">
+                                  Skok +/-: {qtyStepByUnit(it.unit)} {it.unit || "szt"}
+                                </span>
                               </div>
 
-                              <button
-                                disabled={disabled}
+                              <Button
+                                disabled={disabled || effectiveQty <= 0}
                                 onClick={async () => {
-                                  setBusyIds((prev) => new Set(prev).add(it.ingredient_id));
-                                  try {
-                                    const parsedQty = safeNumber(currentInput || "");
-                                    const transferQty = parsedQty ?? it.toBuy;
-                                    if (transferQty > 0) {
-                                      await addToPantry(it.ingredient_id, transferQty);
-                                    }
-                                  } finally {
-                                    setBusyIds((prev) => {
-                                      const next = new Set(prev);
-                                      next.delete(it.ingredient_id);
-                                      return next;
-                                    });
+                                  const change = await addToPantry(it.ingredient_id, effectiveQty);
+                                  if (!change) {
+                                    toast.error("Nie udało się przenieść produktu do pantry.");
+                                    return;
                                   }
+                                  setShoppingState((prev) => {
+                                    const next = new Map(prev);
+                                    next.set(it.ingredient_id, {
+                                      ingredient_id: it.ingredient_id,
+                                      done: true,
+                                      purchased_qty: effectiveQty,
+                                    });
+                                    return next;
+                                  });
+                                  setQtyInputValue(it.ingredient_id, null);
+                                  pushUndo({ type: "pantryTransfer", changes: [change] });
+                                  toast.success("Przeniesiono produkt do pantry.");
                                 }}
                                 title="Przenieś do pantry (bez odhaczania)"
-                                className="btn btn-secondary text-xs"
+                                variant="secondary"
+                                className="h-11"
                               >
                                 Do pantry
-                              </button>
+                              </Button>
+
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="icon"
+                                disabled={disabled || isRemoved}
+                                onClick={() => {
+                                  void markItemAsRemoved(it);
+                                }}
+                                aria-label={`Usuń ${it.name} z listy`}
+                                className="h-11 w-11"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
                           </div>
                         );
@@ -915,29 +1342,81 @@ export default function ShoppingListPage() {
                 );
               })
             )}
+            {selectedPlanIds.size > 0 && computed.categories.length > 0 && listFilterNormalized && (
+              computed.categories.every((cat) => {
+                const items = computed.grouped.get(cat) ?? [];
+                return items.every((it) => {
+                  const qty = effectiveQtyById.get(it.ingredient_id) ?? getDefaultQty(it);
+                  if (hideZero && qty <= 0) return true;
+                  return !it.name.toLowerCase().includes(listFilterNormalized);
+                });
+              }) ? (
+                <p className="text-sm text-slate-500">Brak produktów pasujących do filtra.</p>
+              ) : null
+            )}
           </section>
 
           <section className="card space-y-3">
             <h2 className="section-title">Dodatkowe zakupy (poza bazą)</h2>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                value={extraName}
-                onChange={(e) => setExtraName(e.target.value)}
-                placeholder="np. papier toaletowy"
-                className="input flex-1"
-              />
-              <button onClick={addExtra} disabled={!plan || !extraName.trim()} className="btn btn-primary">
-                Dodaj
-              </button>
+            <div className="relative">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  value={extraName}
+                  onChange={(e) => {
+                    setExtraName(e.target.value);
+                    setExtraSuggestOpen(true);
+                  }}
+                  onFocus={() => setExtraSuggestOpen(true)}
+                  onBlur={() => setTimeout(() => setExtraSuggestOpen(false), 150)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void addExtra();
+                    }
+                  }}
+                  placeholder="np. papier toaletowy"
+                  className="input flex-1"
+                />
+                <Button onClick={() => void addExtra()} disabled={!plan || !extraName.trim()}>
+                  Dodaj
+                </Button>
+              </div>
+
+              {extraSuggestOpen && extraSuggestions.length > 0 && extraName.trim().length >= 2 && (
+                <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                  {extraSuggestions.map((ing) => (
+                    <button
+                      key={ing.id}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setExtraName(ing.name);
+                        setExtraSuggestOpen(false);
+                      }}
+                      className="w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-slate-50"
+                    >
+                      <div className="font-semibold text-slate-900">{ing.name}</div>
+                      <div className="text-xs text-slate-500">
+                        #{ing.id} • {ing.category ?? "bez kategorii"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
-              {extras.length === 0 ? (
-                <p className="text-sm text-slate-500">Brak dodatkowych pozycji.</p>
+              {filteredExtras.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  {listFilterNormalized ? "Brak dodatkowych pozycji pasujących do filtra." : "Brak dodatkowych pozycji."}
+                </p>
               ) : (
-                extras.map((x) => (
-                  <div key={x.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                filteredExtras.map((x) => (
+                  <div
+                    key={x.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3"
+                  >
                     <label className="flex items-center gap-3 text-sm">
                       <input
                         type="checkbox"
@@ -945,12 +1424,19 @@ export default function ShoppingListPage() {
                         onChange={(e) => toggleExtraDone(x.id, e.target.checked)}
                         className="h-4 w-4"
                       />
-                      <span className="font-semibold text-slate-900">{x.name}</span>
+                      <span className={`font-semibold text-slate-900 ${x.done ? "line-through opacity-60" : ""}`}>
+                        {x.name}
+                      </span>
                     </label>
 
-                    <button onClick={() => deleteExtra(x.id)} title="Usuń" className="btn btn-secondary text-xs">
+                    <Button
+                      onClick={() => deleteExtra(x.id)}
+                      title="Usuń"
+                      variant="secondary"
+                      className="h-11 min-w-11 px-3"
+                    >
                       Usuń
-                    </button>
+                    </Button>
                   </div>
                 ))
               )}
@@ -974,6 +1460,48 @@ export default function ShoppingListPage() {
           </div>
         </div>
       </div>
+
+      <AlertDialog open={confirmTransferOpen} onOpenChange={setConfirmTransferOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Przenieść całą listę do pantry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Operacja przeniesie wszystkie aktualne ilości z listy do pantry.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                void transferAllToPantry();
+              }}
+            >
+              Przenieś
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDeleteExtrasOpen} onOpenChange={setConfirmDeleteExtrasOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć wszystkie dodatki?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ta operacja usunie wszystkie dodatkowe produkty wpisane ręcznie.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                void deleteAllExtras();
+              }}
+            >
+              Usuń
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }

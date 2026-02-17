@@ -4,11 +4,13 @@ import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { Menu, RotateCcw } from "lucide-react";
 import SidebarNav from "./SidebarNav";
 import MobileDrawer from "./MobileDrawer";
 import { BottomNavActionProvider, type BottomNavAction } from "./BottomNavActionContext";
 import { Button } from "@/components/ui/button";
 import { PRIMARY_NAV_LINKS, SECONDARY_NAV_LINKS } from "@/lib/nav-links";
+import NavIcon from "./NavIcon";
 
 type AppShellProps = {
   children: ReactNode;
@@ -30,7 +32,7 @@ export default function AppShell({ children }: AppShellProps) {
   const [bottomNavAction, setBottomNavAction] = useState<BottomNavAction | null>(null);
 
   const pageTitle = useMemo(() => getTitle(pathname), [pathname]);
-  const isMealPlanRoute = pathname.startsWith("/meal-plan");
+  const hasCustomBottomAction = bottomNavAction !== null;
 
   if (pathname === "/login") {
     return <>{children}</>;
@@ -60,14 +62,14 @@ export default function AppShell({ children }: AppShellProps) {
                 <Button
                   type="button"
                   variant="secondary"
-                  size="sm"
+                  className="h-11 w-11 p-0"
                   aria-label="Otwórz menu"
                   onClick={() => setNavOpen(true)}
                 >
-                  Menu
+                  <Menu className="h-5 w-5" />
                 </Button>
                 <div className="text-sm font-semibold tracking-tight text-slate-900">{pageTitle}</div>
-                <div className="h-8 w-12" />
+                <div className="h-11 w-11" />
               </div>
             </header>
 
@@ -76,34 +78,34 @@ export default function AppShell({ children }: AppShellProps) {
         </div>
 
         <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/90 backdrop-blur lg:hidden">
-          <div className={`mx-auto grid max-w-6xl px-2 ${isMealPlanRoute ? "grid-cols-5" : "grid-cols-4"}`}>
+          <div className={`mx-auto grid max-w-6xl px-1 ${hasCustomBottomAction ? "grid-cols-5" : "grid-cols-4"}`}>
             {PRIMARY_NAV_LINKS.map((link) => {
               const active = link.matchPrefix ? pathname.startsWith(link.matchPrefix) : pathname === link.href;
               return (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`flex flex-col items-center gap-1 px-2 py-2 text-[11px] font-medium transition ${
+                  className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium transition ${
                     active ? "text-slate-900" : "text-slate-500"
                   }`}
                   aria-current={active ? "page" : undefined}
                 >
-                  <span className="text-base">{link.icon ?? "•"}</span>
+                  <NavIcon icon={link.icon} className="h-5 w-5" />
                   <span className="truncate">{link.label}</span>
                 </Link>
               );
             })}
-            {isMealPlanRoute && (
+            {hasCustomBottomAction && (
               <button
                 type="button"
                 onClick={() => bottomNavAction?.onClick()}
                 disabled={bottomNavAction?.disabled ?? true}
-                className={`flex flex-col items-center gap-1 px-2 py-2 text-[11px] font-medium transition ${
+                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium transition ${
                   bottomNavAction && !(bottomNavAction.disabled ?? false) ? "text-slate-900" : "text-slate-400"
                 }`}
                 aria-label={bottomNavAction?.label ?? "Cofnij"}
               >
-                <span className="text-base">↩</span>
+                <RotateCcw className="h-5 w-5" />
                 <span className="truncate">{bottomNavAction?.label ?? "Cofnij"}</span>
               </button>
             )}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_LINKS, SECONDARY_NAV_LINKS, type NavLink } from "@/lib/nav-links";
+import NavIcon from "./NavIcon";
 
 function isActiveLink(pathname: string, link: NavLink): boolean {
   if (link.exact) return pathname === link.href;
@@ -29,12 +30,12 @@ export default function SidebarNav({ onNavigate }: SidebarNavProps) {
               key={link.href}
               href={link.href}
               onClick={onNavigate}
-              className={`flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-semibold transition ${
+              className={`flex min-h-11 items-center gap-3 rounded-2xl px-3 py-2 text-sm font-semibold transition ${
                 active ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
               }`}
               aria-current={active ? "page" : undefined}
             >
-              <span className="text-base">{link.icon ?? "•"}</span>
+              <NavIcon icon={link.icon} className="h-5 w-5 shrink-0" />
               <span>{link.label}</span>
             </Link>
           );
@@ -51,12 +52,12 @@ export default function SidebarNav({ onNavigate }: SidebarNavProps) {
                 key={link.href}
                 href={link.href}
                 onClick={onNavigate}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition ${
+                className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm transition ${
                   active ? "bg-slate-200 text-slate-900" : "text-slate-600 hover:bg-slate-100"
                 }`}
                 aria-current={active ? "page" : undefined}
               >
-                <span className="text-base">{link.icon ?? "•"}</span>
+                <NavIcon icon={link.icon} className="h-5 w-5 shrink-0" />
                 <span>{link.label}</span>
               </Link>
             );

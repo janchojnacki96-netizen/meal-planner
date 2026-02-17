@@ -1,8 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 type Ingredient = {
   id: number;
@@ -29,6 +32,7 @@ export default function PantryPage() {
   const [addMsg, setAddMsg] = useState<string | null>(null);
   const [addBusy, setAddBusy] = useState(false);
   const [busyIds, setBusyIds] = useState<Set<number>>(new Set());
+  const [confirmRemoveId, setConfirmRemoveId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -118,6 +122,7 @@ export default function PantryPage() {
       if (error) {
         console.error(error);
         setAddMsg("Nie udalo sie dodac produktu.");
+        toast.error(error.message ?? "Nie udało się dodać produktu.");
         return;
       }
 
@@ -146,6 +151,7 @@ export default function PantryPage() {
 
       if (error) {
         console.error(error);
+        toast.error(error.message ?? "Nie udało się usunąć produktu z pantry.");
         return;
       }
 
@@ -188,6 +194,7 @@ export default function PantryPage() {
 
       if (error) {
         console.error(error);
+        toast.error(error.message ?? "Nie udało się zapisać ilości.");
         return;
       }
 
@@ -220,9 +227,9 @@ export default function PantryPage() {
             Dodaj produkty do pantry i edytuj ich ilość. Wyświetlamy tylko produkty już dodane.
           </p>
         </div>
-        <button onClick={signOut} className="btn btn-secondary">
+        <Button onClick={signOut} variant="secondary">
           Wyloguj
-        </button>
+        </Button>
       </header>
 
       <section className="card space-y-3">
@@ -242,22 +249,21 @@ export default function PantryPage() {
               onBlur={() => setTimeout(() => setSuggestOpen(false), 150)}
               className="input flex-1"
             />
-            <button
+            <Button
               type="button"
               onClick={clearSearch}
               disabled={!query && selectedIngredientId === null}
-              className="btn btn-secondary"
+              variant="secondary"
             >
               Wyczyść
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={addSelectedIngredient}
               disabled={selectedIngredientId === null || addBusy}
-              className="btn btn-primary"
             >
               Dodaj
-            </button>
+            </Button>
           </div>
 
           {suggestOpen && suggestions.length > 0 && (
@@ -330,15 +336,45 @@ export default function PantryPage() {
                     className="input w-full sm:w-28"
                   />
                   <span className="text-xs text-slate-500">{ing.unit}</span>
-                  <button onClick={() => removeFromPantry(ing.id)} disabled={disabled} className="btn btn-secondary text-xs">
+                  <Button
+                    onClick={() => setConfirmRemoveId(ing.id)}
+                    disabled={disabled}
+                    variant="secondary"
+                    size="sm"
+                    className="h-11"
+                  >
                     Usuń
-                  </button>
+                  </Button>
                 </div>
               </li>
             );
           })}
         </ul>
       )}
+
+      <AlertDialog open={confirmRemoveId !== null} onOpenChange={(open) => !open && setConfirmRemoveId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć produkt z pantry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ta operacja usunie produkt z Twojej spiżarni.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmRemoveId !== null) {
+                  void removeFromPantry(confirmRemoveId);
+                }
+                setConfirmRemoveId(null);
+              }}
+            >
+              Usuń
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }
