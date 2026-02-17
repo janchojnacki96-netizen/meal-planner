@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import AppShell from "@/components/AppShell";
+import { Toaster } from "@/components/ui/sonner";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -28,6 +29,7 @@ export default function RootLayout({
     <html lang="pl">
       <body className={`${spaceGrotesk.variable} ${plexMono.variable} antialiased`}>
         <AppShell>{children}</AppShell>
+        <Toaster />
       </body>
     </html>
   );

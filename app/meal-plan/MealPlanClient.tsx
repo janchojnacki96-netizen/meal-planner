@@ -5,8 +5,40 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { buildPlanVersionMap, formatPlanLabel } from "@/lib/plans";
 import { useSwipeable } from "react-swipeable";
-import MobileDrawer from "@/components/MobileDrawer";
 import { useBottomNavAction } from "@/components/BottomNavActionContext";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
+import {
+  Ban,
+  Download,
+  MoreVertical,
+  Search,
+  Shuffle,
+  Star,
+  Trash2,
+} from "lucide-react";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 type Pref = "favorite" | "dislike";
@@ -100,7 +132,7 @@ function diffDaysISO(dateA: string, dateB: string): number {
 }
 
 function fmtNumPL(n: number): string {
-  // 2 miejsca po przecinku, z przecinkiem dziesiÄ™tnym, bez trailing zeros
+  // 2 miejsca po przecinku, z przecinkiem dziesiętnym, bez trailing zeros
   const s = (Math.round(n * 100) / 100).toFixed(2);
   const trimmed = s.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
   return trimmed.replace(".", ",");
@@ -112,16 +144,16 @@ function fmtAmount(n: number): string {
 }
 
 function leftoverOrdinalPL(k: number): string {
-  // k: 1 => drugi dzieĹ„, 2 => trzeci dzieĹ„...
+  // k: 1 => drugi dzień, 2 => trzeci dzień...
   const map: Record<number, string> = {
-    1: "drugi dzieĹ„",
-    2: "trzeci dzieĹ„",
-    3: "czwarty dzieĹ„",
-    4: "piÄ…ty dzieĹ„",
-    5: "szĂłsty dzieĹ„",
-    6: "siĂłdmy dzieĹ„",
+    1: "drugi dzień",
+    2: "trzeci dzień",
+    3: "czwarty dzień",
+    4: "piąty dzień",
+    5: "szósty dzień",
+    6: "siódmy dzień",
   };
-  return map[k] ?? `${k + 1}. dzieĹ„`;
+  return map[k] ?? `${k + 1}. dzień`;
 }
 
 function sanitizeDigits(value: string): string {
@@ -224,190 +256,214 @@ function MealSlotRow(props: {
   });
 
   return (
-    <div
+    <Card
       {...swipeHandlers}
-      className="card space-y-3"
-      title="Swipe: lewo = zamien, prawo = nie lubie + zamien"
+      className="space-y-3 border-slate-200"
+      title="Swipe: lewo = zamień, prawo = nie lubię + zamień"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-900">
-            {label}:{" "}
-            <span className="font-medium text-slate-700">{isLeftovers ? `Resztki: ${title}` : title}</span>
-          </div>
-          {slot?.recipe_id && <div className="text-xs text-slate-500">recipe_id: {slot.recipe_id}</div>}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs">
-            <span className="text-slate-500">porcje</span>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={servingsText}
-              disabled={!slot}
-              onChange={(e) => slot && onServingsTextChange(slot.id, sanitizeDigits(e.target.value))}
-              onBlur={() => slot && onCommitServings(slot)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  if (slot) onCommitServings(slot);
-                }
-              }}
-              className="w-16 bg-transparent text-sm font-semibold text-slate-900 focus:outline-none"
-            />
-          </div>
-
-          <button
-            disabled={!slot || isLeftovers || isSwapping || searchDisabled}
-            onClick={() => slot && onOpenSearch(slot)}
-            title="Wybierz przepis"
-            className="btn btn-secondary"
-          >
-            🔎
-          </button>
-
-          <button
-            disabled={!slot || !slot.recipe_id || isLeftovers || isSwapping}
-            onClick={() => slot && onReplace(slot)}
-            title="Zamien przepis"
-            className="btn btn-secondary"
-          >
-            {isSwapping ? "Zmieniam..." : "Zmien"}
-          </button>
-
-          <button
-            disabled={!slot || !slot.recipe_id || isLeftovers || isSwapping}
-            onClick={() => slot && onDislikeAndReplace(slot)}
-            title="Nie lubie (blacklista) + zamien"
-            className="btn btn-secondary"
-          >
-            🚫
-          </button>
-
-          <button
-            disabled={!slot || !slot.recipe_id || isLeftovers || isSwapping}
-            onClick={() => slot && onToggleFavorite(slot)}
-            title="Ulubione (bonus przy wyborze)"
-            className="btn btn-secondary"
-          >
-            {pref === "favorite" ? "⭐" : "☆"}
-          </button>
-
-          <button
-            disabled={!slot || !recipeId || (steps.length === 0 && ingredientRows.length === 0)}
-            onClick={() => slot && onToggleDetails(slot.id)}
-            title="Pokaz / ukryj szczegoly"
-            className="btn btn-secondary"
-          >
-            {detailsOpen ? "Zwin ▲" : "Kroki ▼"}
-          </button>
-        </div>
-      </div>
-
-      {searchOpen && slot && !isLeftovers && (
-        <div className="card-muted space-y-3">
-          <div className="text-sm font-semibold text-slate-900">Wybierz przepis</div>
-          <input
-            value={searchQuery}
-            onChange={(e) => onSearchQueryChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") onCloseSearch();
-            }}
-            placeholder="Wpisz min. 2 litery"
-            className="input"
-          />
-          <div className="flex gap-2">
-            <button onClick={onCloseSearch} disabled={searchBusy} className="btn btn-secondary">
-              Anuluj
-            </button>
-          </div>
-          <div>
-            {searchQuery.trim().length < 2 ? (
-              <div className="text-xs text-slate-500">Wpisz min. 2 litery.</div>
-            ) : searchResults.length === 0 ? (
-              <div className="text-xs text-slate-500">
-                Brak pasujacych przepisow (sprawdz blokady, cooldown lub duplikaty).
-              </div>
-            ) : (
-              <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white">
-                {searchResults.map((rec) => (
-                  <button
-                    key={rec.id}
-                    onClick={() => onSelectSearchRecipe(slot, rec.id)}
-                    disabled={searchBusy}
-                    className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                    title={`Wybierz #${rec.id}`}
-                  >
-                    <span className="font-semibold text-slate-900">{rec.name}</span>
-                    <span className="text-xs text-slate-500">ID: {rec.id}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {detailsOpen && (steps.length > 0 || ingredientRows.length > 0) && (
-        <div className="card-muted space-y-3">
-          <div className="text-sm font-semibold text-slate-900">Skladniki{isLeftovers ? " (resztki)" : ""}</div>
-          {ingredientRows.length === 0 ? (
-            <div className="text-xs text-slate-500">Brak skladnikow w bazie.</div>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {ingredientRows.map((row) => {
-                const baseAmount = row.amount;
-                let displayAmount: string | null = null;
-                if (typeof baseAmount === "number" && Number.isFinite(baseAmount)) {
-                  // TODO: If default servings are missing, show base amount without scaling.
-                  const canScale =
-                    slot && slot.servings > 0 && recipeBaseServings !== null && recipeBaseServings > 0;
-                  const scale = canScale ? slot.servings / recipeBaseServings : 1;
-                  const scaled = baseAmount * scale;
-                  if (Number.isFinite(scaled)) displayAmount = fmtAmount(scaled);
-                }
-
-                const amountText = displayAmount ?? "—";
-                const unitText = row.unit ? ` ${row.unit}` : "";
-                const inPantry = pantryIds.has(row.ingredient_id);
-                const isBlocked = blockedIngredientIds.has(row.ingredient_id);
-                const isBlocking = blockingIngredientIds.has(row.ingredient_id);
-
-                return (
-                  <li key={row.ingredient_id} className="flex items-start justify-between gap-3 leading-relaxed">
-                    <span className={inPantry ? "font-semibold text-amber-700" : "text-slate-700"}>
-                      {row.name} — {amountText}
-                      {unitText}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={isBlocked || isBlocking}
-                      onClick={() => onBlockIngredient(row.ingredient_id, row.name)}
-                      className="btn btn-secondary whitespace-nowrap px-2 py-1 text-xs"
-                    >
-                      {isBlocked ? "Zablokowany" : isBlocking ? "Blokuje..." : "Zablokuj"}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          {steps.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-sm font-semibold text-slate-900">Kroki</div>
-              <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700">
-                {steps.map((step, idx) => (
-                  <li key={idx} className="leading-relaxed">
-                    {step}
-                  </li>
-                ))}
-              </ol>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">{label}</Badge>
+              {isLeftovers && <Badge variant="secondary">Resztki</Badge>}
             </div>
-          )}
+            <div className="break-words text-sm font-semibold text-slate-900">{title}</div>
+            {slot?.recipe_id && <div className="text-xs text-slate-500">recipe_id: {slot.recipe_id}</div>}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs">
+              <span className="text-slate-500">Porcje</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={servingsText}
+                disabled={!slot}
+                onChange={(e) => slot && onServingsTextChange(slot.id, sanitizeDigits(e.target.value))}
+                onBlur={() => slot && onCommitServings(slot)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && slot) onCommitServings(slot);
+                }}
+                className="w-16 bg-transparent text-sm font-semibold text-slate-900 focus:outline-none"
+              />
+            </div>
+
+            <Button
+              variant="secondary"
+              size="icon"
+              disabled={!slot || isLeftovers || isSwapping || searchDisabled}
+              onClick={() => slot && onOpenSearch(slot)}
+              aria-label="Wybierz przepis"
+              title="Wybierz przepis"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!slot || !slot.recipe_id || isLeftovers || isSwapping}
+              onClick={() => slot && onReplace(slot)}
+              aria-label="Zmień przepis"
+              title="Zmień przepis"
+            >
+              <Shuffle className="h-4 w-4" />
+              {isSwapping ? "Zmieniam…" : "Zmień"}
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="icon"
+              disabled={!slot || !slot.recipe_id || isLeftovers || isSwapping}
+              onClick={() => slot && onDislikeAndReplace(slot)}
+              aria-label="Nie lubię i zamień"
+              title="Nie lubię i zamień"
+            >
+              <Ban className="h-4 w-4" />
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="icon"
+              disabled={!slot || !slot.recipe_id || isLeftovers || isSwapping}
+              onClick={() => slot && onToggleFavorite(slot)}
+              aria-label="Ulubione"
+              title="Ulubione"
+            >
+              <Star className={`h-4 w-4 ${pref === "favorite" ? "fill-amber-400 text-amber-400" : ""}`} />
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!slot || !recipeId || (steps.length === 0 && ingredientRows.length === 0)}
+              onClick={() => slot && onToggleDetails(slot.id)}
+              aria-label="Pokaż szczegóły"
+              title="Pokaż szczegóły"
+            >
+              {detailsOpen ? "Zwiń" : "Szczegóły"}
+            </Button>
+          </div>
         </div>
-      )}
-    </div>
+
+        {searchOpen && slot && !isLeftovers && (
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-sm font-semibold text-slate-900">Wybierz przepis</div>
+            <input
+              value={searchQuery}
+              onChange={(e) => onSearchQueryChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") onCloseSearch();
+              }}
+              placeholder="Wpisz min. 2 litery"
+              className="input"
+            />
+            <div className="flex gap-2">
+              <Button onClick={onCloseSearch} disabled={searchBusy} size="sm" variant="secondary">
+                Anuluj
+              </Button>
+            </div>
+            <div>
+              {searchQuery.trim().length < 2 ? (
+                <div className="text-xs text-slate-500">Wpisz min. 2 litery.</div>
+              ) : searchResults.length === 0 ? (
+                <div className="text-xs text-slate-500">
+                  Brak pasujących przepisów (sprawdź blokady, cooldown lub duplikaty).
+                </div>
+              ) : (
+                <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+                  {searchResults.map((rec) => (
+                    <button
+                      key={rec.id}
+                      onClick={() => onSelectSearchRecipe(slot, rec.id)}
+                      disabled={searchBusy}
+                      className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                      title={`Wybierz #${rec.id}`}
+                    >
+                      <span className="font-semibold text-slate-900">{rec.name}</span>
+                      <span className="text-xs text-slate-500">ID: {rec.id}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {detailsOpen && (steps.length > 0 || ingredientRows.length > 0) && (
+          <Accordion
+            type="multiple"
+            defaultValue={["ingredients", "steps"]}
+            className="rounded-2xl border border-slate-200 bg-slate-50 px-3"
+          >
+            <AccordionItem value="ingredients">
+              <AccordionTrigger>Składniki{isLeftovers ? " (resztki)" : ""}</AccordionTrigger>
+              <AccordionContent>
+                {ingredientRows.length === 0 ? (
+                  <div className="text-xs text-slate-500">Brak składników w bazie.</div>
+                ) : (
+                  <ul className="space-y-2 text-sm">
+                    {ingredientRows.map((row) => {
+                      const baseAmount = row.amount;
+                      let displayAmount: string | null = null;
+                      if (typeof baseAmount === "number" && Number.isFinite(baseAmount)) {
+                        // TODO: If default servings are missing, show base amount without scaling.
+                        const canScale =
+                          slot && slot.servings > 0 && recipeBaseServings !== null && recipeBaseServings > 0;
+                        const scale = canScale ? slot.servings / recipeBaseServings : 1;
+                        const scaled = baseAmount * scale;
+                        if (Number.isFinite(scaled)) displayAmount = fmtAmount(scaled);
+                      }
+
+                      const amountText = displayAmount ?? "—";
+                      const unitText = row.unit ? ` ${row.unit}` : "";
+                      const inPantry = pantryIds.has(row.ingredient_id);
+                      const isBlocked = blockedIngredientIds.has(row.ingredient_id);
+                      const isBlocking = blockingIngredientIds.has(row.ingredient_id);
+
+                      return (
+                        <li key={row.ingredient_id} className="flex items-start justify-between gap-3 leading-relaxed">
+                          <span className={inPantry ? "font-semibold text-amber-700" : "text-slate-700"}>
+                            {row.name} — {amountText}
+                            {unitText}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={isBlocked || isBlocking}
+                            onClick={() => onBlockIngredient(row.ingredient_id, row.name)}
+                          >
+                            {isBlocked ? "Zablokowany" : isBlocking ? "Blokuję…" : "Zablokuj"}
+                          </Button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="steps">
+              <AccordionTrigger>Kroki</AccordionTrigger>
+              <AccordionContent>
+                {steps.length > 0 ? (
+                  <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700">
+                    {steps.map((step, idx) => (
+                      <li key={idx} className="leading-relaxed">
+                        {step}
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div className="text-xs text-slate-500">Brak kroków w bazie.</div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 export default function MealPlanPage() {
@@ -429,7 +485,7 @@ export default function MealPlanPage() {
   const [cooldownDays, setCooldownDays] = useState<number>(14);
   const [cooldownDaysText, setCooldownDaysText] = useState<string>("14");
 
-  // skĹ‚adniki do wykorzystania (autocomplete)
+  // składniki do wykorzystania (autocomplete)
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [ingredientQuery, setIngredientQuery] = useState("");
   const [ingredientSuggestOpen, setIngredientSuggestOpen] = useState(false);
@@ -468,7 +524,6 @@ export default function MealPlanPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [plansDrawerOpen, setPlansDrawerOpen] = useState(false);
   const [undoBusy, setUndoBusy] = useState(false);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [undoCount, setUndoCount] = useState(0);
   const loadedRecipeIdsRef = useRef<Set<number>>(new Set());
   const undoStackRef = useRef<UndoAction[]>([]);
@@ -565,10 +620,6 @@ export default function MealPlanPage() {
     setIngredientQuery("");
   }
 
-  function showToast(message: string) {
-    setToastMsg(message);
-  }
-
   function pushUndoAction(action: UndoAction) {
     const next = [...undoStackRef.current, action];
     undoStackRef.current = next.slice(-30);
@@ -602,12 +653,6 @@ export default function MealPlanPage() {
     setCooldownDaysText(String(normalized));
     return normalized;
   }
-
-  useEffect(() => {
-    if (!toastMsg) return;
-    const t = window.setTimeout(() => setToastMsg(null), 2200);
-    return () => window.clearTimeout(t);
-  }, [toastMsg]);
 
   // --- start: load base data + plans list ---
   useEffect(() => {
@@ -872,7 +917,7 @@ export default function MealPlanPage() {
   }
 
   function mealLabel(mt: MealType) {
-    if (mt === "breakfast") return "Ĺšniadanie";
+    if (mt === "breakfast") return "Śniadanie";
     if (mt === "lunch") return "Obiad";
     return "Kolacja";
   }
@@ -1119,7 +1164,7 @@ export default function MealPlanPage() {
 
       if (error) {
         console.error(error);
-        alert("BĹ‚Ä…d zapisu wyboru przepisu.");
+        toast.error("Błąd zapisu wyboru przepisu.");
         return false;
       }
 
@@ -1134,7 +1179,7 @@ export default function MealPlanPage() {
           nextRecipeId: recipeId,
         });
       }
-      showToast("Zmieniono przepis.");
+      toast.success("Zmieniono przepis.");
 
       return true;
     } finally {
@@ -1280,7 +1325,7 @@ export default function MealPlanPage() {
     }
 
     if (blockedMiss && hasBlocked) {
-      alert("Brak przepisu speĹ‚niajÄ…cego wymagania (blokady produktĂłw).");
+      toast.error("Brak przepisu spełniającego wymagania (blokady produktów).");
     }
 
     const { error: slotsErr } = await supabase.from("meal_plan_slots").insert(
@@ -1363,9 +1408,9 @@ export default function MealPlanPage() {
 
       if (!newRecipeId) {
         if (blockedIngredientIds.size > 0) {
-          alert("Brak przepisu speĹ‚niajÄ…cego wymagania (blokady produktĂłw).");
+          toast.error("Brak przepisu spełniającego wymagania (blokady produktów).");
         } else {
-          alert("Nie znalazĹ‚em alternatywnego przepisu.");
+          toast.error("Nie znalazłem alternatywnego przepisu.");
         }
         return;
       }
@@ -1379,7 +1424,7 @@ export default function MealPlanPage() {
 
       if (error) {
         console.error(error);
-        alert("BĹ‚Ä…d zapisu zamiany do bazy.");
+        toast.error("Błąd zapisu zamiany do bazy.");
         return;
       }
 
@@ -1392,7 +1437,7 @@ export default function MealPlanPage() {
         prevRecipeId: slot.recipe_id,
         nextRecipeId: newRecipeId,
       });
-      showToast("Zmieniono przepis.");
+      toast.success("Zmieniono przepis.");
     } finally {
       setSwappingSlotIds((prev) => {
         const next = new Set(prev);
@@ -1419,7 +1464,7 @@ export default function MealPlanPage() {
 
   async function blockIngredientFromSlot(ingredientId: number, ingredientName: string) {
     if (!userId) {
-      alert("Musisz być zalogowany, aby blokować składniki.");
+      toast.error("Musisz być zalogowany, aby blokować składniki.");
       return;
     }
     if (blockedIngredientIds.has(ingredientId)) return;
@@ -1459,13 +1504,12 @@ export default function MealPlanPage() {
         code: error.code,
         raw: error,
       });
-      alert(`Nie udało się zablokować składnika: ${error.message}`);
-      showToast(`Błąd blokady: ${error.message}`);
+      toast.error(`Nie udało się zablokować składnika: ${error.message}`);
       return;
     }
 
     pushUndoAction({ type: "blockIngredient", ingredientId, ingredientName });
-    showToast(`Zablokowano: ${ingredientName}`);
+    toast.success(`Zablokowano: ${ingredientName}`);
   }
 
   const handleUndo = useCallback(async () => {
@@ -1491,7 +1535,7 @@ export default function MealPlanPage() {
         setSlots((prev) =>
           prev.map((slot) => (last.slotIds.includes(slot.id) ? { ...slot, recipe_id: last.prevRecipeId } : slot))
         );
-        showToast("Cofnięto zmianę przepisu.");
+        toast.success("Cofnięto zmianę przepisu.");
       }
 
       if (last.type === "blockIngredient") {
@@ -1514,15 +1558,14 @@ export default function MealPlanPage() {
           next.delete(last.ingredientId);
           return next;
         });
-        showToast(`Cofnięto blokadę: ${last.ingredientName}`);
+        toast.success(`Cofnięto blokadę: ${last.ingredientName}`);
       }
     } catch (err) {
       undoStackRef.current = [...undoStackRef.current, last].slice(-30);
       setUndoCount(undoStackRef.current.length);
       console.error("undo error", err);
       const message = err instanceof Error ? err.message : "Nie udało się cofnąć operacji.";
-      alert(message);
-      showToast(message);
+      toast.error(message);
     } finally {
       setUndoBusy(false);
     }
@@ -1552,6 +1595,11 @@ export default function MealPlanPage() {
     return Array.from({ length: activePlan.days_count }, (_, i) => addDaysISO(activePlan.start_date, i));
   }, [activePlan]);
 
+  const totalServings = useMemo(
+    () => slots.reduce((sum, slot) => (slot.servings > 0 ? sum + slot.servings : sum), 0),
+    [slots]
+  );
+
   function goToPlan(planId: string) {
     setSelectedPlanId(planId);
     router.push(`/meal-plan?plan=${planId}`);
@@ -1562,30 +1610,31 @@ export default function MealPlanPage() {
     const pl = allPlans.find((x) => x.id === planId);
     const name = pl ? planLabel(pl) : planId;
 
-    const ok = window.confirm(`Czy na pewno chcesz usunÄ…Ä‡ plan: ${name}?\n\nTo usunie teĹĽ wszystkie sloty planu.`);
+    const ok = window.confirm(`Czy na pewno chcesz usunąć plan: ${name}?\n\nTo usunie też wszystkie sloty planu.`);
     if (!ok) return;
 
-    // usuĹ„ sloty, potem plan
+    // usuń sloty, potem plan
     const { error: sErr } = await supabase.from("meal_plan_slots").delete().eq("meal_plan_id", planId);
     if (sErr) {
       console.error(sErr);
-      alert("Nie udaĹ‚o siÄ™ usunÄ…Ä‡ slotĂłw planu (brak uprawnieĹ„ / RLS?).");
+      toast.error("Nie udało się usunąć slotów planu (brak uprawnień / RLS?).");
       return;
     }
 
     const { error: pErr } = await supabase.from("meal_plans").delete().eq("id", planId);
     if (pErr) {
       console.error(pErr);
-      alert("Nie udaĹ‚o siÄ™ usunÄ…Ä‡ planu (brak uprawnieĹ„ / RLS?).");
+      toast.error("Nie udało się usunąć planu (brak uprawnień / RLS?).");
       return;
     }
+    toast.success("Plan został usunięty.");
 
-    // odĹ›wieĹĽ listÄ™ i wybierz kolejny
+    // odśwież listę i wybierz kolejny
     await refreshPlansList();
 
-    // jeĹ›li usuniÄ™ty byĹ‚ aktywny
+    // jeśli usunięty był aktywny
     if (selectedPlanId === planId) {
-      // po refreshPlansList mamy nowe allPlans dopiero po renderze, wiÄ™c pobierz listÄ™ na szybko:
+      // po refreshPlansList mamy nowe allPlans dopiero po renderze, więc pobierz listę na szybko:
       const { data: plans } = await supabase
         .from("meal_plans")
         .select("id,start_date,days_count,created_at")
@@ -1687,7 +1736,7 @@ export default function MealPlanPage() {
     dinnerSlots.forEach((s, i) => KCode.set(s.id, `K${i + 1}`));
     lunchCookSlots.forEach((s, i) => OCodeByRecipeStart.set(s.id, `O${i + 1}`));
 
-    // dla lunch leftover dni: znajdĹş najbliĹĽszy wczeĹ›niejszy cook slot z tym samym recipe_id
+    // dla lunch leftover dni: znajdź najbliższy wcześniejszy cook slot z tym samym recipe_id
     function getLunchCodeForDay(date: string): { code: string | null; suffix: string | null } {
       const s = getSlot(date, "lunch");
       if (!s || !s.recipe_id) return { code: null, suffix: null };
@@ -1710,14 +1759,14 @@ export default function MealPlanPage() {
           const code = OCodeByRecipeStart.get(prev.id) ?? null;
           return { code, suffix: leftoverOrdinalPL(offset) };
         }
-        // jeĹĽeli inny przepis po drodze, przerywamy
+        // jeżeli inny przepis po drodze, przerywamy
         if (prev && prev.recipe_id !== s.recipe_id) break;
       }
 
-      return { code: null, suffix: "kolejny dzieĹ„" };
+      return { code: null, suffix: "kolejny dzień" };
     }
 
-    // rozpiska dni (DzieĹ„ 1: Sx, Oy, Kz)
+    // rozpiska dni (Dzień 1: Sx, Oy, Kz)
     const planLines: string[] = [];
     for (let i = 0; i < daysISO.length; i++) {
       const d = daysISO[i];
@@ -1743,7 +1792,7 @@ export default function MealPlanPage() {
           ? "K (resztki)"
           : "K?";
 
-      planLines.push(`<li><b>DzieĹ„ ${i + 1}:</b> ${escapeHtml(sCode)}, ${escapeHtml(oCode + oSuffix)}, ${escapeHtml(kCode)}</li>`);
+      planLines.push(`<li><b>Dzień ${i + 1}:</b> ${escapeHtml(sCode)}, ${escapeHtml(oCode + oSuffix)}, ${escapeHtml(kCode)}</li>`);
     }
 
     // sekcje recipes
@@ -1761,13 +1810,13 @@ export default function MealPlanPage() {
 
       const stepsHtml = steps.length
         ? `<ol>${steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>`
-        : `<ol><li>(brak krokĂłw w bazie)</li></ol>`;
+        : `<ol><li>(brak kroków w bazie)</li></ol>`;
 
       return `
   <details class="recipe">
-    <summary><span class="dot"></span><p class="title">${escapeHtml(code)}. ${escapeHtml(title)}${escapeHtml(portionsTxt)}</p><div class="chev">âŚ„</div></summary>
+    <summary><span class="dot"></span><p class="title">${escapeHtml(code)}. ${escapeHtml(title)}${escapeHtml(portionsTxt)}</p><div class="chev">⌄</div></summary>
     <div class="content">
-      <div class="line"><span class="label">SkĹ‚adniki:</span> ${escapeHtml(ingLine)}</div>
+      <div class="line"><span class="label">Składniki:</span> ${escapeHtml(ingLine)}</div>
       ${stepsHtml}
     </div>
   </details>`;
@@ -1785,19 +1834,19 @@ export default function MealPlanPage() {
       .map((s) => buildDetailsForSlot(KCode.get(s.id)!, s, "dinner"))
       .join("\n");
 
-    const title = `JadĹ‚ospis i przepisy â€“ ${plan.days_count} dni`;
+    const title = `Jadłospis i przepisy – ${plan.days_count} dni`;
     const planName = `${planLabel(plan)}.html`;
 
     const lunchMeta =
       lunchSpanDays > 1
-        ? `obiady â€“ ${people * lunchSpanDays} porcji (kaĹĽdy obiad na ${lunchSpanDays} dni)`
-        : `obiady â€“ ${people} porcje`;
+        ? `obiady – ${people * lunchSpanDays} porcji (każdy obiad na ${lunchSpanDays} dni)`
+        : `obiady – ${people} porcje`;
 
     const metaLine = `
-    <b>Porcje:</b> Ĺ›niadania i kolacje â€“ ${people} porcje, ${lunchMeta}.<br>
-    SkĹ‚adniki i iloĹ›ci sÄ… podane <b>po przecinku</b>.`;
+    <b>Porcje:</b> śniadania i kolacje – ${people} porcje, ${lunchMeta}.<br>
+    Składniki i ilości są podane <b>po przecinku</b>.`;
 
-    // HTML (styl jak podaĹ‚eĹ›)
+    // HTML (styl jak podałeś)
     const html = `<!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -1919,8 +1968,8 @@ export default function MealPlanPage() {
   <h1>${escapeHtml(title)} (${people} osoby)</h1>
   <p class="meta">${metaLine}</p>
   <div class="tools">
-    <button class="primary" onclick="toggleAll(true)">RozwiĹ„ wszystko</button>
-    <button onclick="toggleAll(false)">ZwiĹ„ wszystko</button>
+    <button class="primary" onclick="toggleAll(true)">Rozwiń wszystko</button>
+    <button onclick="toggleAll(false)">Zwiń wszystko</button>
   </div>
 </header>
 
@@ -1932,17 +1981,17 @@ export default function MealPlanPage() {
 </div>
 
 <section class="section breakfast">
-  <div class="section-head"><div>Ĺšniadania (${breakfastSlots.length ? `S1â€“S${breakfastSlots.length}` : "S" })</div><div class="pill">indygo</div></div>
+  <div class="section-head"><div>Śniadania (${breakfastSlots.length ? `S1–S${breakfastSlots.length}` : "S" })</div><div class="pill">indygo</div></div>
   ${breakfastDetails || ""}
 </section>
 
 <section class="section lunch">
-  <div class="section-head"><div>Obiady (${lunchCookSlots.length ? `O1â€“O${lunchCookSlots.length}` : "O"}) â€“ na ${lunchSpanDays} dni kaĹĽdy</div><div class="pill">cyjan</div></div>
+  <div class="section-head"><div>Obiady (${lunchCookSlots.length ? `O1–O${lunchCookSlots.length}` : "O"}) – na ${lunchSpanDays} dni każdy</div><div class="pill">cyjan</div></div>
   ${lunchDetails || ""}
 </section>
 
 <section class="section dinner">
-  <div class="section-head"><div>Kolacje (${dinnerSlots.length ? `K1â€“K${dinnerSlots.length}` : "K"})</div><div class="pill">zieleĹ„</div></div>
+  <div class="section-head"><div>Kolacje (${dinnerSlots.length ? `K1–K${dinnerSlots.length}` : "K"})</div><div class="pill">zieleń</div></div>
   ${dinnerDetails || ""}
 </section>
 
@@ -1960,14 +2009,15 @@ export default function MealPlanPage() {
   }
 
   async function downloadPlan(planId: string) {
-    // jeĹ›li to aktywny plan - uĹĽyj danych z pamiÄ™ci
+    // jeśli to aktywny plan - użyj danych z pamięci
     if (activePlan && activePlan.id === planId) {
       const { html, filename } = generateExportHtml(activePlan, slots);
       fileDownload(filename, html);
+      toast.success("Pobrano plik HTML planu.");
       return;
     }
 
-    // inaczej dociÄ…gnij z bazy
+    // inaczej dociągnij z bazy
     const { data: pl, error: pErr } = await supabase
       .from("meal_plans")
       .select("id,start_date,days_count,created_at")
@@ -1976,7 +2026,7 @@ export default function MealPlanPage() {
 
     if (pErr || !pl) {
       console.error(pErr);
-      alert("Nie udaĹ‚o siÄ™ pobraÄ‡ planu do exportu.");
+      toast.error("Nie udało się pobrać planu do eksportu.");
       return;
     }
 
@@ -1987,12 +2037,13 @@ export default function MealPlanPage() {
 
     if (sErr) {
       console.error(sErr);
-      alert("Nie udaĹ‚o siÄ™ pobraÄ‡ slotĂłw do exportu.");
+      toast.error("Nie udało się pobrać slotów do eksportu.");
       return;
     }
 
     const { html, filename } = generateExportHtml(pl as MealPlan, (s ?? []) as Slot[]);
     fileDownload(filename, html);
+    toast.success("Pobrano plik HTML planu.");
   }
 
   // --- UI derived ---
@@ -2000,63 +2051,64 @@ export default function MealPlanPage() {
   const plansPanel = (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="section-title">Moje jadĹ‚ospisy</h2>
-        <button onClick={refreshPlansList} title="OdĹ›wieĹĽ listÄ™" className="btn btn-secondary text-xs">
-          OdĹ›wieĹĽ
-        </button>
+        <h2 className="text-sm font-semibold text-slate-900">Moje jadłospisy</h2>
+        <Button onClick={refreshPlansList} title="Odśwież listę" variant="secondary" size="sm">
+          Odśwież
+        </Button>
       </div>
+      <Separator />
 
       <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
         {allPlans.length === 0 ? (
-          <div className="text-sm text-slate-500">Brak planĂłw.</div>
+          <div className="text-sm text-slate-500">Brak planów.</div>
         ) : (
           allPlans.map((pl) => {
             const isActive = pl.id === activePlan?.id;
 
             return (
-              <div
-                key={pl.id}
-                className={`flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 ${
-                  isActive ? "ring-1 ring-slate-900/10" : ""
-                }`}
-              >
-                <button
-                  onClick={() => goToPlan(pl.id)}
-                  className="flex-1 text-left"
-                  title="Kliknij, aby przejĹ›Ä‡ do tego planu"
-                >
-                  <div className="font-semibold text-slate-900">{planLabel(pl)}</div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    start: {pl.start_date} â€˘ dni: {pl.days_count}
-                  </div>
-                </button>
-
-                <div className="flex flex-col gap-2">
+              <Card key={pl.id} className={`border-slate-200 shadow-none ${isActive ? "ring-1 ring-slate-900/10" : ""}`}>
+                <CardContent className="flex items-start justify-between gap-3 p-3">
                   <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      downloadPlan(pl.id);
-                    }}
-                    title="Pobierz HTML"
-                    className="btn btn-secondary text-xs"
+                    onClick={() => goToPlan(pl.id)}
+                    className="flex-1 text-left"
+                    title="Kliknij, aby przejść do tego planu"
                   >
-                    â¬‡ď¸Ź
+                    <div className="font-semibold text-slate-900">{planLabel(pl)}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      start: {pl.start_date} • dni: {pl.days_count}
+                    </div>
                   </button>
 
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      deletePlan(pl.id);
-                    }}
-                    title="UsuĹ„ plan"
-                    className="btn btn-danger text-xs"
-                  >
-                    đź—‘ď¸Ź
-                  </button>
-                </div>
-              </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="secondary" size="icon" aria-label="Akcje planu">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.preventDefault();
+                          downloadPlan(pl.id);
+                        }}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Pobierz HTML
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.preventDefault();
+                          deletePlan(pl.id);
+                        }}
+                        className="text-rose-600 focus:text-rose-600"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Usuń plan
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </CardContent>
+              </Card>
             );
           })
         )}
@@ -2066,8 +2118,12 @@ export default function MealPlanPage() {
 
   if (loading) {
     return (
-      <main className="card">
-        <p className="text-sm text-slate-600">Ĺadowanieâ€¦</p>
+      <main>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-slate-600">Ładowanie…</p>
+          </CardContent>
+        </Card>
       </main>
     );
   }
@@ -2076,27 +2132,31 @@ export default function MealPlanPage() {
     <main className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">JadĹ‚ospis</h1>
-          <p className="text-sm text-slate-600">Planowanie posiĹ‚kĂłw z szybkim podglÄ…dem skĹ‚adnikĂłw.</p>
+          <h1 className="text-2xl font-semibold text-slate-900">Jadłospis</h1>
+          <p className="text-sm text-slate-600">Jadłospis • Łącznie porcji: {totalServings}</p>
         </div>
-        <button onClick={() => setPlansDrawerOpen(true)} className="btn btn-secondary lg:hidden">
+        <Button onClick={() => setPlansDrawerOpen(true)} variant="secondary" className="lg:hidden">
           Plany
-        </button>
+        </Button>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
-          <section className="card space-y-4">
-            <h2 className="section-title">UtwĂłrz nowy plan</h2>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle>Utwórz nowy plan</CardTitle>
+              <CardDescription>Parametry generowania tygodnia i preferencje produktów.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
 
-            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
                 Data startu
                 <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="input" />
               </label>
 
               <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-                Liczba dni (1â€“31)
+                Liczba dni (1–31)
                 <input
                   type="text"
                   inputMode="numeric"
@@ -2111,7 +2171,7 @@ export default function MealPlanPage() {
               </label>
 
               <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-                Liczba osĂłb (domyĹ›lne porcje na posiĹ‚ek)
+                Liczba osób (domyślne porcje na posiłek)
                 <input
                   type="text"
                   inputMode="numeric"
@@ -2126,7 +2186,7 @@ export default function MealPlanPage() {
               </label>
 
               <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-                Obiad gotujÄ™ na ile dni (np. 2 = gotujÄ™ raz, potem resztki)
+                Obiad gotuję na ile dni (np. 2 = gotuję raz, potem resztki)
                 <input
                   type="text"
                   inputMode="numeric"
@@ -2141,7 +2201,7 @@ export default function MealPlanPage() {
               </label>
 
               <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 sm:col-span-2">
-                Cooldown (nie powtarzaj przez X dni, 0 = wyĹ‚Ä…cz)
+                Cooldown (nie powtarzaj przez X dni, 0 = wyłącz)
                 <input
                   type="text"
                   inputMode="numeric"
@@ -2157,26 +2217,26 @@ export default function MealPlanPage() {
 
               <div className="relative sm:col-span-2">
                 <label className="block text-sm font-semibold text-slate-700">
-                  SkĹ‚adniki do wykorzystania (po nazwie)
+                  Składniki do wykorzystania (po nazwie)
                 </label>
 
                 {selectedIngredients.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {selectedIngredients.map((ing) => (
-                      <span key={ing.id} className="chip" title={`#${ing.id} â€˘ ${ing.category ?? "bez kategorii"}`}>
+                      <span key={ing.id} className="chip" title={`#${ing.id} • ${ing.category ?? "bez kategorii"}`}>
                         {ing.name}
                         <button
                           onClick={() => removeSelectedIngredient(ing.id)}
                           className="text-xs text-slate-500 hover:text-slate-900"
-                          title="UsuĹ„"
+                          title="Usuń"
                         >
-                          âś–
+                          ✖
                         </button>
                       </span>
                     ))}
 
                     <button onClick={clearSelectedIngredients} className="btn btn-secondary text-xs">
-                      WyczyĹ›Ä‡
+                      Wyczyść
                     </button>
                   </div>
                 )}
@@ -2189,7 +2249,7 @@ export default function MealPlanPage() {
                   }}
                   onFocus={() => setIngredientSuggestOpen(true)}
                   onBlur={() => setTimeout(() => setIngredientSuggestOpen(false), 150)}
-                  placeholder="Wpisz min. 2 litery, np. jaj, mle, chleâ€¦"
+                  placeholder="Wpisz min. 2 litery, np. jaj, mle, chle…"
                   className="input mt-3"
                 />
 
@@ -2201,11 +2261,11 @@ export default function MealPlanPage() {
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => addSelectedIngredient(ing.id)}
                         className="w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-slate-50"
-                        title={`Dodaj â€˘ #${ing.id}`}
+                        title={`Dodaj • #${ing.id}`}
                       >
                         <div className="font-semibold text-slate-900">{ing.name}</div>
                         <div className="text-xs text-slate-500">
-                          {ing.category ?? "bez kategorii"} â€˘ jednostka: {ing.unit} â€˘ ID: {ing.id}
+                          {ing.category ?? "bez kategorii"} • jednostka: {ing.unit} • ID: {ing.id}
                         </div>
                       </button>
                     ))}
@@ -2220,7 +2280,7 @@ export default function MealPlanPage() {
                       onChange={(e) => setUseIngredientIdsHard(e.target.checked)}
                       className="h-4 w-4"
                     />
-                    Tryb twardy: wymagaj wszystkich wybranych skĹ‚adnikĂłw
+                    Tryb twardy: wymagaj wszystkich wybranych składników
                   </label>
                 </div>
               </div>
@@ -2232,40 +2292,46 @@ export default function MealPlanPage() {
                   onChange={(e) => setPreferPantry(e.target.checked)}
                   className="h-4 w-4"
                 />
-                Preferuj przepisy pasujÄ…ce do Pantry
+                Preferuj przepisy pasujące do Pantry
               </label>
 
               <div className="sm:col-span-2">
-                <button onClick={createPlan} disabled={busy} className="btn btn-primary w-full sm:w-auto">
-                  {busy ? "TworzÄ™â€¦" : "UtwĂłrz plan"}
-                </button>
+                <Button onClick={createPlan} disabled={busy} className="w-full sm:w-auto">
+                  {busy ? "Tworzę…" : "Utwórz plan"}
+                </Button>
               </div>
             </div>
-          </section>
+            </CardContent>
+          </Card>
 
-          <section className="card-muted space-y-2">
-            <h2 className="section-title">Sterowanie</h2>
+          <Card className="border-slate-200 bg-slate-50/70">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Sterowanie</CardTitle>
+            </CardHeader>
+            <CardContent>
             <p className="text-sm text-slate-600">
-              Swipe: <b>lewo</b> = zamieĹ„ â€˘ <b>prawo</b> = đźš« nie lubiÄ™ + zamieĹ„ â€˘ <b>Kroki â–Ľ</b> = instrukcja.
+              Swipe: <b>lewo</b> = zamień • <b>prawo</b> = 🚫 nie lubię + zamień • <b>Kroki ▼</b> = instrukcja.
             </p>
-          </section>
+            </CardContent>
+          </Card>
 
           <section className="space-y-4">
-            <h2 className="section-title">Aktualny plan</h2>
+            <h2 className="text-base font-semibold text-slate-900">Aktualny plan</h2>
 
             {!activePlan ? (
-              <p className="text-sm text-slate-600">Nie masz jeszcze planu. UtwĂłrz nowy powyĹĽej.</p>
+              <p className="text-sm text-slate-600">Nie masz jeszcze planu. Utwórz nowy powyżej.</p>
             ) : (
               <div className="space-y-3">
                 <p className="text-sm text-slate-600">
-                  Plan: <b className="text-slate-900">{planLabel(activePlan)}</b> â€˘ start:{" "}
-                  <b className="text-slate-900">{activePlan.start_date}</b> â€˘ dni:{" "}
+                  Plan: <b className="text-slate-900">{planLabel(activePlan)}</b> • start:{" "}
+                  <b className="text-slate-900">{activePlan.start_date}</b> • dni:{" "}
                   <b className="text-slate-900">{activePlan.days_count}</b>
                 </p>
 
                 <div className="grid gap-4">
                   {days.map((date) => (
-                    <section key={date} className="card-muted space-y-3">
+                    <Card key={date} className="border-slate-200 bg-slate-50/70">
+                      <CardContent className="space-y-3 p-4">
                       <div className="text-sm font-semibold text-slate-900">{date}</div>
 
                       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -2329,7 +2395,8 @@ export default function MealPlanPage() {
                           );
                         })}
                       </div>
-                    </section>
+                      </CardContent>
+                    </Card>
                   ))}
                 </div>
               </div>
@@ -2338,19 +2405,21 @@ export default function MealPlanPage() {
         </div>
 
         <aside className="hidden lg:block">
-          <div className="card sticky top-6">{plansPanel}</div>
+          <Card className="sticky top-6 border-slate-200">
+            <CardContent className="p-4">{plansPanel}</CardContent>
+          </Card>
         </aside>
       </div>
 
-      <MobileDrawer open={plansDrawerOpen} onClose={() => setPlansDrawerOpen(false)} title="Moje jadĹ‚ospisy" side="bottom">
-        {plansPanel}
-      </MobileDrawer>
-
-      {toastMsg && (
-        <div className="pointer-events-none fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg">
-          {toastMsg}
-        </div>
-      )}
+      <Sheet open={plansDrawerOpen} onOpenChange={setPlansDrawerOpen}>
+        <SheetContent side="bottom" className="max-h-[85vh]">
+          <SheetHeader>
+            <SheetTitle>Moje jadłospisy</SheetTitle>
+            <SheetDescription>Wybierz plan, pobierz HTML albo usuń plan.</SheetDescription>
+          </SheetHeader>
+          <div className="mt-4">{plansPanel}</div>
+        </SheetContent>
+      </Sheet>
     </main>
   );
 }
