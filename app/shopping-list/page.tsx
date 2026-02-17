@@ -1185,7 +1185,7 @@ export default function ShoppingListPage() {
                       <span className="badge">{visible.length}</span>
                     </summary>
 
-                    <div className="mt-3 space-y-3">
+                    <div className="mt-3 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
                       {visible.map((it) => {
                         const done = getDone(it.ingredient_id);
                         const disabled = busyIds.has(it.ingredient_id);
@@ -1203,138 +1203,147 @@ export default function ShoppingListPage() {
                             : `w pantry: ${fmtQty(it.pantryQty)} ${it.unit}`;
 
                         return (
-                          <div
+                          <details
                             key={it.ingredient_id}
-                            className={`flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 ${
-                              isRemoved ? "opacity-50" : ""
-                            }`}
+                            className={`group overflow-hidden ${isRemoved ? "opacity-50" : ""}`}
                           >
-                            <label className="flex flex-1 items-start gap-3 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={done}
-                                disabled={disabled}
-                                onChange={(e) => {
-                                  const checked = e.target.checked;
-                                  const qty = parseIntQty((inputQty.get(it.ingredient_id) ?? qtyStr) || "");
-                                  toggleBoughtAndTransfer(it.ingredient_id, checked, qty);
-                                }}
-                                className="mt-1 h-4 w-4"
-                              />
-                              <div className="space-y-1">
-                                <div className={`font-semibold text-slate-900 ${isRemoved ? "line-through" : ""}`}>
-                                  {it.name} <span className="text-xs text-slate-400">#{it.ingredient_id}</span>
+                            <summary className="list-none cursor-pointer px-3 py-2">
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={done}
+                                  disabled={disabled}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    const qty = parseIntQty((inputQty.get(it.ingredient_id) ?? qtyStr) || "");
+                                    toggleBoughtAndTransfer(it.ingredient_id, checked, qty);
+                                  }}
+                                  className="h-4 w-4"
+                                />
+                                <div className="min-w-0 flex-1 space-y-0.5">
+                                  <div className={`truncate text-sm font-semibold text-slate-900 ${isRemoved ? "line-through" : ""}`}>
+                                    {it.name}
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    do kupienia: <b className="text-slate-900">{fmtQty(effectiveQty)}</b> {it.unit || "szt"}
+                                  </div>
                                 </div>
-                                <div className="text-xs text-slate-500">
-                                  potrzebne: <b className="text-slate-900">{fmtQty(it.needed)}</b> {it.unit} • {pantryFlag}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  do kupienia: <b className="text-slate-900">{fmtQty(effectiveQty)}</b> {it.unit}
+                                <div className="text-right">
+                                  <div className="text-sm font-semibold text-slate-900">
+                                    {fmtQty(effectiveQty)} {it.unit || "szt"}
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 group-open:hidden">Pokaż opcje</div>
+                                  <div className="hidden text-[11px] text-indigo-600 group-open:block">Ukryj opcje</div>
                                 </div>
                               </div>
-                            </label>
+                            </summary>
 
-                            <div className="grid gap-2 sm:grid-cols-[auto_auto_auto] sm:items-end">
-                              <div className="flex flex-col gap-1 sm:min-w-[210px]">
-                                <span className="text-[11px] uppercase tracking-wide text-slate-400">Ilość do pantry/listy</span>
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    size="icon"
-                                    disabled={disabled}
-                                    onClick={() => {
-                                      void adjustQtyByStep(it, "minus");
-                                    }}
-                                    aria-label={`Zmniejsz ilość ${it.name}`}
-                                    className="h-11 w-11"
-                                  >
-                                    <Minus className="h-4 w-4" />
-                                  </Button>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step={1}
-                                    inputMode="numeric"
-                                    value={currentInput}
-                                    disabled={disabled}
-                                    onChange={(e) => {
-                                      const clean = e.target.value.replace(/[^\d]/g, "");
-                                      setQtyInputValue(it.ingredient_id, clean);
-                                    }}
-                                    onBlur={() => {
-                                      void commitQtyInput(it);
-                                    }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") {
-                                        e.preventDefault();
+                            <div className="space-y-3 border-t border-slate-200 px-3 pb-3 pt-3">
+                              <div className="text-xs text-slate-500">
+                                potrzebne: <b className="text-slate-900">{fmtQty(it.needed)}</b> {it.unit || "szt"} • {pantryFlag}
+                              </div>
+
+                              <div className="grid gap-2 sm:grid-cols-[minmax(0,260px)_auto_auto] sm:items-end">
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-[11px] uppercase tracking-wide text-slate-400">Ilość do pantry/listy</span>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      size="icon"
+                                      disabled={disabled}
+                                      onClick={() => {
+                                        void adjustQtyByStep(it, "minus");
+                                      }}
+                                      aria-label={`Zmniejsz ilość ${it.name}`}
+                                    >
+                                      <Minus className="h-4 w-4" />
+                                    </Button>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step={1}
+                                      inputMode="numeric"
+                                      value={currentInput}
+                                      disabled={disabled}
+                                      onChange={(e) => {
+                                        const clean = e.target.value.replace(/[^\d]/g, "");
+                                        setQtyInputValue(it.ingredient_id, clean);
+                                      }}
+                                      onBlur={() => {
                                         void commitQtyInput(it);
-                                      }
-                                    }}
-                                    className="input h-11 text-center"
-                                  />
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    size="icon"
-                                    disabled={disabled}
-                                    onClick={() => {
-                                      void adjustQtyByStep(it, "plus");
-                                    }}
-                                    aria-label={`Zwiększ ilość ${it.name}`}
-                                    className="h-11 w-11"
-                                  >
-                                    <Plus className="h-4 w-4" />
-                                  </Button>
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.preventDefault();
+                                          void commitQtyInput(it);
+                                        }
+                                      }}
+                                      className="input h-11 text-center"
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      size="icon"
+                                      disabled={disabled}
+                                      onClick={() => {
+                                        void adjustQtyByStep(it, "plus");
+                                      }}
+                                      aria-label={`Zwiększ ilość ${it.name}`}
+                                    >
+                                      <Plus className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                  <span className="text-[11px] text-slate-400">
+                                    Skok +/-: {qtyStepByUnit(it.unit)} {it.unit || "szt"}
+                                  </span>
                                 </div>
-                                <span className="text-[11px] text-slate-400">
-                                  Skok +/-: {qtyStepByUnit(it.unit)} {it.unit || "szt"}
-                                </span>
-                              </div>
 
-                              <Button
-                                disabled={disabled || effectiveQty <= 0}
-                                onClick={async () => {
-                                  const change = await addToPantry(it.ingredient_id, effectiveQty);
-                                  if (!change) {
-                                    toast.error("Nie udało się przenieść produktu do pantry.");
-                                    return;
-                                  }
-                                  setShoppingState((prev) => {
-                                    const next = new Map(prev);
-                                    next.set(it.ingredient_id, {
-                                      ingredient_id: it.ingredient_id,
-                                      done: true,
-                                      purchased_qty: effectiveQty,
+                                <Button
+                                  disabled={disabled || effectiveQty <= 0}
+                                  onClick={async () => {
+                                    const change = await addToPantry(it.ingredient_id, effectiveQty);
+                                    if (!change) {
+                                      toast.error("Nie udało się przenieść produktu do pantry.");
+                                      return;
+                                    }
+                                    setShoppingState((prev) => {
+                                      const next = new Map(prev);
+                                      next.set(it.ingredient_id, {
+                                        ingredient_id: it.ingredient_id,
+                                        done: true,
+                                        purchased_qty: effectiveQty,
+                                      });
+                                      return next;
                                     });
-                                    return next;
-                                  });
-                                  setQtyInputValue(it.ingredient_id, null);
-                                  pushUndo({ type: "pantryTransfer", changes: [change] });
-                                  toast.success("Przeniesiono produkt do pantry.");
-                                }}
-                                title="Przenieś do pantry (bez odhaczania)"
-                                variant="secondary"
-                                className="h-11"
-                              >
-                                Do pantry
-                              </Button>
+                                    setQtyInputValue(it.ingredient_id, null);
+                                    pushUndo({ type: "pantryTransfer", changes: [change] });
+                                    toast.success("Przeniesiono produkt do pantry.");
+                                  }}
+                                  title="Przenieś do pantry"
+                                  variant="outline"
+                                  className="h-11"
+                                >
+                                  Do pantry
+                                </Button>
 
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="icon"
-                                disabled={disabled || isRemoved}
-                                onClick={() => {
-                                  void markItemAsRemoved(it);
-                                }}
-                                aria-label={`Usuń ${it.name} z listy`}
-                                className="h-11 w-11"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  disabled={disabled || isRemoved}
+                                  onClick={() => {
+                                    void markItemAsRemoved(it);
+                                  }}
+                                  aria-label={`Usuń ${it.name} z listy`}
+                                  className="h-11"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Usuń
+                                </Button>
+                              </div>
                             </div>
-                          </div>
+                          </details>
                         );
                       })}
                     </div>

@@ -188,6 +188,7 @@ function shuffleNumbers(values: number[]): number[] {
 function MealSlotRow(props: {
   slot: Slot | undefined;
   label: string;
+  contextLabel?: string;
   title: string;
   isLeftovers: boolean;
   isSwapping: boolean;
@@ -224,6 +225,7 @@ function MealSlotRow(props: {
   const {
     slot,
     label,
+    contextLabel,
     title,
     isLeftovers,
     isSwapping,
@@ -278,6 +280,7 @@ function MealSlotRow(props: {
               <Badge variant="outline">{label}</Badge>
               {isLeftovers && <Badge variant="secondary">Resztki</Badge>}
             </div>
+            {contextLabel && <div className="text-xs font-medium text-slate-500">{contextLabel}</div>}
             <div className="break-words text-sm font-semibold text-slate-900">{title}</div>
             {slot?.recipe_id && <div className="text-xs text-slate-500">recipe_id: {slot.recipe_id}</div>}
           </div>
@@ -475,6 +478,15 @@ function MealSlotRow(props: {
       </CardContent>
     </Card>
   );
+}
+
+function dayShortLabelPL(dateISO: string, dayIndex: number): string {
+  const d = new Date(`${dateISO}T00:00:00`);
+  const weekdayMap = ["Nd", "Pon", "Wt", "Śr", "Cz", "Pt", "Sob"] as const;
+  const weekday = weekdayMap[d.getDay()] ?? "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `Dzień ${dayIndex + 1} • ${weekday} ${day}.${month}`;
 }
 export default function MealPlanPage() {
   const supabase = createClient();
@@ -1606,6 +1618,39 @@ export default function MealPlanPage() {
     return Array.from({ length: activePlan.days_count }, (_, i) => addDaysISO(activePlan.start_date, i));
   }, [activePlan]);
 
+  const dayLabelByDate = useMemo(() => {
+    const map = new Map<string, string>();
+    days.forEach((date, idx) => {
+      map.set(date, dayShortLabelPL(date, idx));
+    });
+    return map;
+  }, [days]);
+
+  const groupedMealSections = useMemo(
+    () =>
+      [
+        {
+          mealType: "breakfast" as MealType,
+          title: "Śniadania",
+          containerClass: "border-indigo-200 bg-indigo-50/55",
+          badgeClass: "bg-indigo-100 text-indigo-700",
+        },
+        {
+          mealType: "lunch" as MealType,
+          title: "Obiady",
+          containerClass: "border-cyan-200 bg-cyan-50/55",
+          badgeClass: "bg-cyan-100 text-cyan-700",
+        },
+        {
+          mealType: "dinner" as MealType,
+          title: "Kolacje",
+          containerClass: "border-emerald-200 bg-emerald-50/55",
+          badgeClass: "bg-emerald-100 text-emerald-700",
+        },
+      ] as const,
+    []
+  );
+
   const totalServings = useMemo(
     () => slots.reduce((sum, slot) => (slot.servings > 0 ? sum + slot.servings : sum), 0),
     [slots]
@@ -2058,7 +2103,6 @@ export default function MealPlanPage() {
   }
 
   // --- UI derived ---
-  const slotsIndexLocal = slotsIndex;
   const plansPanel = (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -2339,15 +2383,20 @@ export default function MealPlanPage() {
                   <b className="text-slate-900">{activePlan.days_count}</b>
                 </p>
 
-                <div className="grid gap-4">
-                  {days.map((date) => (
-                    <Card key={date} className="border-slate-200 bg-slate-50/70">
-                      <CardContent className="space-y-3 p-4">
-                      <div className="text-sm font-semibold text-slate-900">{date}</div>
-
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        {(["breakfast", "lunch", "dinner"] as MealType[]).map((mt) => {
-                          const slot = slotsIndexLocal.get(`${date}|${mt}`);
+                <div className="space-y-4">
+                  {groupedMealSections.map((section) => (
+                    <Card key={section.mealType} className={section.containerClass}>
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <CardTitle className="text-base">{section.title}</CardTitle>
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${section.badgeClass}`}>
+                            {days.length}
+                          </span>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {days.map((date) => {
+                          const slot = slotsIndex.get(`${date}|${section.mealType}`);
                           const recipe = slot?.recipe_id ? recipesById.get(slot.recipe_id) : null;
 
                           const title = recipe ? recipe.name : "Brak przepisu";
@@ -2355,7 +2404,6 @@ export default function MealPlanPage() {
                           const isSwapping = slot ? swappingSlotIds.has(slot.id) : false;
                           const isSearchOpen = slot ? openSearchForSlotId === slot.id : false;
                           const searchResults = slot && isSearchOpen ? getRecipeCandidates(slot, searchQuery) : [];
-
                           const pref = slot?.recipe_id ? (prefs.get(slot.recipe_id) ?? null) : null;
                           const steps = Array.isArray(recipe?.steps) ? (recipe!.steps as string[]) : [];
                           const recipeId = recipe ? recipe.id : null;
@@ -2367,9 +2415,10 @@ export default function MealPlanPage() {
 
                           return (
                             <MealSlotRow
-                              key={slot?.id ?? `${date}|${mt}`}
+                              key={slot?.id ?? `${date}|${section.mealType}`}
                               slot={slot}
-                              label={mealLabel(mt)}
+                              label={dayLabelByDate.get(date) ?? date}
+                              contextLabel={mealLabel(section.mealType)}
                               title={title}
                               isLeftovers={isLeftovers}
                               isSwapping={isSwapping}
@@ -2405,7 +2454,6 @@ export default function MealPlanPage() {
                             />
                           );
                         })}
-                      </div>
                       </CardContent>
                     </Card>
                   ))}

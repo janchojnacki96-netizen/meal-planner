@@ -46,7 +46,7 @@ export default function AppShell({ children }: AppShellProps) {
         </MobileDrawer>
 
         <div className="lg:flex">
-          <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:gap-6 lg:border-r lg:border-slate-200 lg:bg-white/70 lg:backdrop-blur">
+          <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:gap-6 lg:border-r lg:border-slate-200 lg:bg-white/75 lg:backdrop-blur">
             <div className="px-6 pt-6">
               <Link href="/meal-plan" className="text-lg font-semibold tracking-tight">
                 Meal Planner
@@ -57,7 +57,7 @@ export default function AppShell({ children }: AppShellProps) {
           </aside>
 
           <div className="min-w-0 flex-1">
-            <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur lg:hidden">
+            <header className="sticky top-0 z-30 border-b border-slate-200 bg-gradient-to-r from-slate-50/95 via-indigo-50/70 to-teal-50/65 backdrop-blur lg:hidden">
               <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
                 <Button
                   type="button"
@@ -77,7 +77,7 @@ export default function AppShell({ children }: AppShellProps) {
           </div>
         </div>
 
-        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/90 backdrop-blur lg:hidden">
+        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-gradient-to-r from-slate-50/95 via-indigo-50/70 to-teal-50/65 backdrop-blur lg:hidden">
           <div className={`mx-auto grid max-w-6xl px-1 ${hasCustomBottomAction ? "grid-cols-5" : "grid-cols-4"}`}>
             {PRIMARY_NAV_LINKS.map((link) => {
               const active = link.matchPrefix ? pathname.startsWith(link.matchPrefix) : pathname === link.href;
@@ -86,7 +86,7 @@ export default function AppShell({ children }: AppShellProps) {
                   key={link.href}
                   href={link.href}
                   className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium transition ${
-                    active ? "text-slate-900" : "text-slate-500"
+                    active ? "text-indigo-700" : "text-slate-500"
                   }`}
                   aria-current={active ? "page" : undefined}
                 >
@@ -101,7 +101,7 @@ export default function AppShell({ children }: AppShellProps) {
                 onClick={() => bottomNavAction?.onClick()}
                 disabled={bottomNavAction?.disabled ?? true}
                 className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium transition ${
-                  bottomNavAction && !(bottomNavAction.disabled ?? false) ? "text-slate-900" : "text-slate-400"
+                  bottomNavAction && !(bottomNavAction.disabled ?? false) ? "text-indigo-700" : "text-slate-400"
                 }`}
                 aria-label={bottomNavAction?.label ?? "Cofnij"}
               >
