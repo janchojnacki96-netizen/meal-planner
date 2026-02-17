@@ -1,11 +1,12 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { buildPlanVersionMap, formatPlanLabel } from "@/lib/plans";
 import { useSwipeable } from "react-swipeable";
 import MobileDrawer from "@/components/MobileDrawer";
+import { useBottomNavAction } from "@/components/BottomNavActionContext";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 type Pref = "favorite" | "dislike";
@@ -66,6 +67,19 @@ type Ingredient = {
   category: string | null;
 };
 
+type UndoAction =
+  | {
+      type: "swap";
+      slotIds: string[];
+      prevRecipeId: number;
+      nextRecipeId: number;
+    }
+  | {
+      type: "blockIngredient";
+      ingredientId: number;
+      ingredientName: string;
+    };
+
 function toISODate(d: Date): string {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -86,7 +100,7 @@ function diffDaysISO(dateA: string, dateB: string): number {
 }
 
 function fmtNumPL(n: number): string {
-  // 2 miejsca po przecinku, z przecinkiem dziesiętnym, bez trailing zeros
+  // 2 miejsca po przecinku, z przecinkiem dziesiÄ™tnym, bez trailing zeros
   const s = (Math.round(n * 100) / 100).toFixed(2);
   const trimmed = s.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
   return trimmed.replace(".", ",");
@@ -98,16 +112,35 @@ function fmtAmount(n: number): string {
 }
 
 function leftoverOrdinalPL(k: number): string {
-  // k: 1 => drugi dzień, 2 => trzeci dzień...
+  // k: 1 => drugi dzieĹ„, 2 => trzeci dzieĹ„...
   const map: Record<number, string> = {
-    1: "drugi dzień",
-    2: "trzeci dzień",
-    3: "czwarty dzień",
-    4: "piąty dzień",
-    5: "szósty dzień",
-    6: "siódmy dzień",
+    1: "drugi dzieĹ„",
+    2: "trzeci dzieĹ„",
+    3: "czwarty dzieĹ„",
+    4: "piÄ…ty dzieĹ„",
+    5: "szĂłsty dzieĹ„",
+    6: "siĂłdmy dzieĹ„",
   };
-  return map[k] ?? `${k + 1}. dzień`;
+  return map[k] ?? `${k + 1}. dzieĹ„`;
+}
+
+function sanitizeDigits(value: string): string {
+  return value.replace(/[^\d]/g, "");
+}
+
+function normalizeIntInput(value: string, fallback: number, min: number, max: number): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return Math.min(max, Math.max(min, fallback));
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function shuffleNumbers(values: number[]): number[] {
+  const out = [...values];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 function MealSlotRow(props: {
@@ -121,13 +154,21 @@ function MealSlotRow(props: {
   steps: string[];
   ingredientRows: RecipeIngredientDisplay[];
   recipeBaseServings: number | null;
+  detailsOpen: boolean;
 
   onReplace: (slot: Slot) => void;
   onDislikeAndReplace: (slot: Slot) => void;
   onToggleFavorite: (slot: Slot) => void;
   pref: Pref | null;
 
-  onUpdateServings: (slotId: string, servings: number) => void;
+  servingsText: string;
+  onServingsTextChange: (slotId: string, value: string) => void;
+  onCommitServings: (slot: Slot) => void;
+  onToggleDetails: (slotId: string) => void;
+  onBlockIngredient: (ingredientId: number, ingredientName: string) => void;
+  pantryIds: Set<number>;
+  blockedIngredientIds: Set<number>;
+  blockingIngredientIds: Set<number>;
   onOpenSearch: (slot: Slot) => void;
   onCloseSearch: () => void;
   onSearchQueryChange: (value: string) => void;
@@ -148,11 +189,19 @@ function MealSlotRow(props: {
     steps,
     ingredientRows,
     recipeBaseServings,
+    detailsOpen,
     onReplace,
     onDislikeAndReplace,
     onToggleFavorite,
     pref,
-    onUpdateServings,
+    servingsText,
+    onServingsTextChange,
+    onCommitServings,
+    onToggleDetails,
+    onBlockIngredient,
+    pantryIds,
+    blockedIngredientIds,
+    blockingIngredientIds,
     onOpenSearch,
     onCloseSearch,
     onSearchQueryChange,
@@ -163,8 +212,6 @@ function MealSlotRow(props: {
     searchBusy,
     searchDisabled,
   } = props;
-
-  const [open, setOpen] = useState(false);
 
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
@@ -180,15 +227,13 @@ function MealSlotRow(props: {
     <div
       {...swipeHandlers}
       className="card space-y-3"
-      title="Swipe: lewo = zamień, prawo = 🚫 nie lubię + zamień"
+      title="Swipe: lewo = zamien, prawo = nie lubie + zamien"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-slate-900">
             {label}:{" "}
-            <span className="font-medium text-slate-700">
-              {isLeftovers ? `Resztki: ${title}` : title}
-            </span>
+            <span className="font-medium text-slate-700">{isLeftovers ? `Resztki: ${title}` : title}</span>
           </div>
           {slot?.recipe_id && <div className="text-xs text-slate-500">recipe_id: {slot.recipe_id}</div>}
         </div>
@@ -197,11 +242,17 @@ function MealSlotRow(props: {
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs">
             <span className="text-slate-500">porcje</span>
             <input
-              type="number"
-              min={0}
-              value={slot?.servings ?? 0}
+              type="text"
+              inputMode="numeric"
+              value={servingsText}
               disabled={!slot}
-              onChange={(e) => slot && onUpdateServings(slot.id, Number(e.target.value))}
+              onChange={(e) => slot && onServingsTextChange(slot.id, sanitizeDigits(e.target.value))}
+              onBlur={() => slot && onCommitServings(slot)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  if (slot) onCommitServings(slot);
+                }
+              }}
               className="w-16 bg-transparent text-sm font-semibold text-slate-900 focus:outline-none"
             />
           </div>
@@ -218,16 +269,16 @@ function MealSlotRow(props: {
           <button
             disabled={!slot || !slot.recipe_id || isLeftovers || isSwapping}
             onClick={() => slot && onReplace(slot)}
-            title="Zamień przepis"
+            title="Zamien przepis"
             className="btn btn-secondary"
           >
-            {isSwapping ? "Zmieniam…" : "Zamień"}
+            {isSwapping ? "Zmieniam..." : "Zmien"}
           </button>
 
           <button
             disabled={!slot || !slot.recipe_id || isLeftovers || isSwapping}
             onClick={() => slot && onDislikeAndReplace(slot)}
-            title="Nie lubię (blacklista) + zamień"
+            title="Nie lubie (blacklista) + zamien"
             className="btn btn-secondary"
           >
             🚫
@@ -243,12 +294,12 @@ function MealSlotRow(props: {
           </button>
 
           <button
-            disabled={!recipeId || (steps.length === 0 && ingredientRows.length === 0)}
-            onClick={() => setOpen((v) => !v)}
-            title="Pokaż / ukryj szczegóły"
+            disabled={!slot || !recipeId || (steps.length === 0 && ingredientRows.length === 0)}
+            onClick={() => slot && onToggleDetails(slot.id)}
+            title="Pokaz / ukryj szczegoly"
             className="btn btn-secondary"
           >
-            {open ? "Zwiń ▲" : "Kroki ▼"}
+            {detailsOpen ? "Zwin ▲" : "Kroki ▼"}
           </button>
         </div>
       </div>
@@ -275,7 +326,7 @@ function MealSlotRow(props: {
               <div className="text-xs text-slate-500">Wpisz min. 2 litery.</div>
             ) : searchResults.length === 0 ? (
               <div className="text-xs text-slate-500">
-                Brak pasujących przepisów (sprawdź blokady, cooldown lub duplikaty).
+                Brak pasujacych przepisow (sprawdz blokady, cooldown lub duplikaty).
               </div>
             ) : (
               <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white">
@@ -297,20 +348,18 @@ function MealSlotRow(props: {
         </div>
       )}
 
-      {open && (steps.length > 0 || ingredientRows.length > 0) && (
+      {detailsOpen && (steps.length > 0 || ingredientRows.length > 0) && (
         <div className="card-muted space-y-3">
-          <div className="text-sm font-semibold text-slate-900">
-            Składniki{isLeftovers ? " (resztki)" : ""}
-          </div>
+          <div className="text-sm font-semibold text-slate-900">Skladniki{isLeftovers ? " (resztki)" : ""}</div>
           {ingredientRows.length === 0 ? (
-            <div className="text-xs text-slate-500">Brak składników w bazie.</div>
+            <div className="text-xs text-slate-500">Brak skladnikow w bazie.</div>
           ) : (
-            <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
+            <ul className="space-y-2 text-sm">
               {ingredientRows.map((row) => {
                 const baseAmount = row.amount;
                 let displayAmount: string | null = null;
                 if (typeof baseAmount === "number" && Number.isFinite(baseAmount)) {
-                  // TODO: Jeśli brak bazowej liczby porcji, pokazuj ilość bez skalowania.
+                  // TODO: If default servings are missing, show base amount without scaling.
                   const canScale =
                     slot && slot.servings > 0 && recipeBaseServings !== null && recipeBaseServings > 0;
                   const scale = canScale ? slot.servings / recipeBaseServings : 1;
@@ -320,11 +369,24 @@ function MealSlotRow(props: {
 
                 const amountText = displayAmount ?? "—";
                 const unitText = row.unit ? ` ${row.unit}` : "";
+                const inPantry = pantryIds.has(row.ingredient_id);
+                const isBlocked = blockedIngredientIds.has(row.ingredient_id);
+                const isBlocking = blockingIngredientIds.has(row.ingredient_id);
 
                 return (
-                  <li key={row.ingredient_id} className="leading-relaxed">
-                    {row.name} — {amountText}
-                    {unitText}
+                  <li key={row.ingredient_id} className="flex items-start justify-between gap-3 leading-relaxed">
+                    <span className={inPantry ? "font-semibold text-amber-700" : "text-slate-700"}>
+                      {row.name} — {amountText}
+                      {unitText}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={isBlocked || isBlocking}
+                      onClick={() => onBlockIngredient(row.ingredient_id, row.name)}
+                      className="btn btn-secondary whitespace-nowrap px-2 py-1 text-xs"
+                    >
+                      {isBlocked ? "Zablokowany" : isBlocking ? "Blokuje..." : "Zablokuj"}
+                    </button>
                   </li>
                 );
               })}
@@ -348,22 +410,26 @@ function MealSlotRow(props: {
     </div>
   );
 }
-
 export default function MealPlanPage() {
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { setBottomNavAction } = useBottomNavAction();
 
   // formularz
   const [startDate, setStartDate] = useState<string>(toISODate(new Date()));
   const [daysCount, setDaysCount] = useState<number>(7);
+  const [daysCountText, setDaysCountText] = useState<string>("7");
   const [people, setPeople] = useState<number>(3);
+  const [peopleText, setPeopleText] = useState<string>("3");
   const [lunchSpanDays, setLunchSpanDays] = useState<number>(1);
+  const [lunchSpanDaysText, setLunchSpanDaysText] = useState<string>("1");
 
   // cooldown
   const [cooldownDays, setCooldownDays] = useState<number>(14);
+  const [cooldownDaysText, setCooldownDaysText] = useState<string>("14");
 
-  // składniki do wykorzystania (autocomplete)
+  // skĹ‚adniki do wykorzystania (autocomplete)
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [ingredientQuery, setIngredientQuery] = useState("");
   const [ingredientSuggestOpen, setIngredientSuggestOpen] = useState(false);
@@ -382,6 +448,7 @@ export default function MealPlanPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [prefs, setPrefs] = useState<Map<number, Pref>>(new Map());
   const [blockedIngredientIds, setBlockedIngredientIds] = useState<Set<number>>(new Set());
+  const [blockingIngredientIds, setBlockingIngredientIds] = useState<Set<number>>(new Set());
 
   // plany
   const [allPlans, setAllPlans] = useState<MealPlan[]>([]);
@@ -395,10 +462,21 @@ export default function MealPlanPage() {
   const [busy, setBusy] = useState(false);
 
   const [swappingSlotIds, setSwappingSlotIds] = useState<Set<string>>(new Set());
+  const [openSlotIds, setOpenSlotIds] = useState<Set<string>>(new Set());
+  const [servingsDraftBySlotId, setServingsDraftBySlotId] = useState<Record<string, string>>({});
   const [openSearchForSlotId, setOpenSearchForSlotId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [plansDrawerOpen, setPlansDrawerOpen] = useState(false);
+  const [undoBusy, setUndoBusy] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [undoCount, setUndoCount] = useState(0);
   const loadedRecipeIdsRef = useRef<Set<number>>(new Set());
+  const undoStackRef = useRef<UndoAction[]>([]);
+  const replacePoolRef = useRef<Record<MealType, number[]>>({
+    breakfast: [],
+    lunch: [],
+    dinner: [],
+  });
 
   // --- mapy ---
   const ingredientsById = useMemo(() => {
@@ -487,6 +565,50 @@ export default function MealPlanPage() {
     setIngredientQuery("");
   }
 
+  function showToast(message: string) {
+    setToastMsg(message);
+  }
+
+  function pushUndoAction(action: UndoAction) {
+    const next = [...undoStackRef.current, action];
+    undoStackRef.current = next.slice(-30);
+    setUndoCount(undoStackRef.current.length);
+  }
+
+  function commitDaysCountInput() {
+    const normalized = normalizeIntInput(daysCountText, daysCount, 1, 31);
+    setDaysCount(normalized);
+    setDaysCountText(String(normalized));
+    return normalized;
+  }
+
+  function commitPeopleInput() {
+    const normalized = normalizeIntInput(peopleText, people, 1, 20);
+    setPeople(normalized);
+    setPeopleText(String(normalized));
+    return normalized;
+  }
+
+  function commitLunchSpanInput() {
+    const normalized = normalizeIntInput(lunchSpanDaysText, lunchSpanDays, 1, 7);
+    setLunchSpanDays(normalized);
+    setLunchSpanDaysText(String(normalized));
+    return normalized;
+  }
+
+  function commitCooldownInput() {
+    const normalized = normalizeIntInput(cooldownDaysText, cooldownDays, 0, 60);
+    setCooldownDays(normalized);
+    setCooldownDaysText(String(normalized));
+    return normalized;
+  }
+
+  useEffect(() => {
+    if (!toastMsg) return;
+    const t = window.setTimeout(() => setToastMsg(null), 2200);
+    return () => window.clearTimeout(t);
+  }, [toastMsg]);
+
   // --- start: load base data + plans list ---
   useEffect(() => {
     (async () => {
@@ -520,7 +642,7 @@ export default function MealPlanPage() {
 
       setRecipes((r ?? []) as Recipe[]);
       setRecipeIngs((ri ?? []) as RecipeIngRow[]);
-      setPantryIds(new Set((pan ?? []).map((x) => x.ingredient_id)));
+      setPantryIds(new Set((pan ?? []).map((x) => Number(x.ingredient_id)).filter((id) => Number.isFinite(id))));
       setIngredients((ing ?? []) as Ingredient[]);
       setBlockedIngredientIds(new Set((blocked ?? []).map((x) => Number(x.ingredient_id))));
 
@@ -566,6 +688,14 @@ export default function MealPlanPage() {
       setSlots((s ?? []) as Slot[]);
     })();
   }, [selectedPlanId, supabase]);
+
+  useEffect(() => {
+    setOpenSlotIds(new Set());
+    setServingsDraftBySlotId({});
+    setOpenSearchForSlotId(null);
+    setSearchQuery("");
+    replacePoolRef.current = { breakfast: [], lunch: [], dinner: [] };
+  }, [selectedPlanId]);
 
   useEffect(() => {
     const neededRecipeIds = Array.from(
@@ -713,8 +843,36 @@ export default function MealPlanPage() {
     setSearchQuery("");
   }
 
+  function toggleSlotDetails(slotId: string) {
+    setOpenSlotIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(slotId)) next.delete(slotId);
+      else next.add(slotId);
+      return next;
+    });
+  }
+
+  function updateServingsDraft(slotId: string, value: string) {
+    setServingsDraftBySlotId((prev) => ({ ...prev, [slotId]: value }));
+  }
+
+  function commitServingsDraft(slot: Slot) {
+    const raw = servingsDraftBySlotId[slot.id] ?? String(slot.servings);
+    const normalized = normalizeIntInput(raw, slot.servings, 0, 999);
+
+    setServingsDraftBySlotId((prev) => {
+      const next = { ...prev };
+      delete next[slot.id];
+      return next;
+    });
+
+    if (normalized !== slot.servings) {
+      void updateServings(slot.id, normalized);
+    }
+  }
+
   function mealLabel(mt: MealType) {
-    if (mt === "breakfast") return "Śniadanie";
+    if (mt === "breakfast") return "Ĺšniadanie";
     if (mt === "lunch") return "Obiad";
     return "Kolacja";
   }
@@ -889,7 +1047,7 @@ export default function MealPlanPage() {
       if (strict.length > 0) candidates = strict;
     }
 
-    candidates.sort((a, b) => {
+    const ranked = [...candidates].sort((a, b) => {
       const da = desiredMatchRatio(a.id, desired);
       const db = desiredMatchRatio(b.id, desired);
       const desiredBonusA = desired.size ? 0.35 * da : 0;
@@ -902,8 +1060,17 @@ export default function MealPlanPage() {
       return a.name.localeCompare(b.name);
     });
 
-    const top = candidates.slice(0, Math.min(3, candidates.length));
-    return top[Math.floor(Math.random() * top.length)].id;
+    const candidateIds = ranked.map((r) => r.id);
+    const candidateSet = new Set<number>(candidateIds);
+
+    let pool = replacePoolRef.current[mealType].filter((id) => candidateSet.has(id));
+    if (pool.length === 0) {
+      pool = shuffleNumbers(candidateIds);
+    }
+
+    const nextRecipeId = pool[0] ?? null;
+    replacePoolRef.current[mealType] = pool.slice(1);
+    return nextRecipeId;
   }
 
   async function refreshPlansList() {
@@ -933,6 +1100,7 @@ export default function MealPlanPage() {
   async function setSlotRecipe(slot: Slot, recipeId: number): Promise<boolean> {
     if (!slot.id) return false;
     if (slot.servings === 0) return false;
+    if (slot.recipe_id === recipeId) return true;
 
     setSwappingSlotIds((prev) => {
       const next = new Set(prev);
@@ -951,13 +1119,22 @@ export default function MealPlanPage() {
 
       if (error) {
         console.error(error);
-        alert("Błąd zapisu wyboru przepisu.");
+        alert("BĹ‚Ä…d zapisu wyboru przepisu.");
         return false;
       }
 
       setSlots((prev) =>
         prev.map((s) => (slotIdsToUpdate.includes(s.id) ? { ...s, recipe_id: recipeId } : s))
       );
+      if (typeof slot.recipe_id === "number") {
+        pushUndoAction({
+          type: "swap",
+          slotIds: slotIdsToUpdate,
+          prevRecipeId: slot.recipe_id,
+          nextRecipeId: recipeId,
+        });
+      }
+      showToast("Zmieniono przepis.");
 
       return true;
     } finally {
@@ -973,7 +1150,12 @@ export default function MealPlanPage() {
   async function createPlan() {
     setBusy(true);
 
-    const cd = Math.max(0, Math.floor(cooldownDays));
+    const daysValue = commitDaysCountInput();
+    const peopleValue = commitPeopleInput();
+    const lunchSpanValue = commitLunchSpanInput();
+    const cooldownValue = commitCooldownInput();
+
+    const cd = Math.max(0, Math.floor(cooldownValue));
     const hasBlocked = blockedIngredientIds.size > 0;
     let blockedMiss = false;
 
@@ -1007,7 +1189,7 @@ export default function MealPlanPage() {
 
     const { data: plan, error: planErr } = await supabase
       .from("meal_plans")
-      .insert({ start_date: startDate, days_count: daysCount })
+      .insert({ start_date: startDate, days_count: daysValue })
       .select("id,start_date,days_count,created_at")
       .single();
 
@@ -1022,7 +1204,7 @@ export default function MealPlanPage() {
     const usedGlobal = new Set<number>();
     const newSlots: Omit<Slot, "id">[] = [];
 
-    for (let day = 0; day < daysCount; day++) {
+    for (let day = 0; day < daysValue; day++) {
       const date = addDaysISO(startDate, day);
 
       // breakfast
@@ -1037,11 +1219,11 @@ export default function MealPlanPage() {
           usedGlobal.add(rid);
           queues.get("breakfast")!.push({ dayIndex: day, recipeId: rid });
         }
-        newSlots.push({ date, meal_type: "breakfast", recipe_id: rid, servings: people });
+        newSlots.push({ date, meal_type: "breakfast", recipe_id: rid, servings: peopleValue });
       }
 
       // lunch (resztki)
-      if (lunchSpanDays <= 1) {
+      if (lunchSpanValue <= 1) {
         const q = pruneQueue(queues.get("lunch")!, day, cd);
         queues.set("lunch", q);
         const cooldownExclude = cd > 0 ? queueToSet(q) : new Set<number>();
@@ -1052,9 +1234,9 @@ export default function MealPlanPage() {
           usedGlobal.add(rid);
           queues.get("lunch")!.push({ dayIndex: day, recipeId: rid });
         }
-        newSlots.push({ date, meal_type: "lunch", recipe_id: rid, servings: people });
+        newSlots.push({ date, meal_type: "lunch", recipe_id: rid, servings: peopleValue });
       } else {
-        if (day % lunchSpanDays === 0) {
+        if (day % lunchSpanValue === 0) {
           const q = pruneQueue(queues.get("lunch")!, day, cd);
           queues.set("lunch", q);
           const cooldownExclude = cd > 0 ? queueToSet(q) : new Set<number>();
@@ -1070,11 +1252,11 @@ export default function MealPlanPage() {
             date,
             meal_type: "lunch",
             recipe_id: rid,
-            servings: people * lunchSpanDays,
+            servings: peopleValue * lunchSpanValue,
           });
 
-          for (let k = 1; k < lunchSpanDays; k++) {
-            if (day + k >= daysCount) break;
+          for (let k = 1; k < lunchSpanValue; k++) {
+            if (day + k >= daysValue) break;
             const d2 = addDaysISO(startDate, day + k);
             newSlots.push({ date: d2, meal_type: "lunch", recipe_id: rid, servings: 0 });
           }
@@ -1093,12 +1275,12 @@ export default function MealPlanPage() {
           usedGlobal.add(rid);
           queues.get("dinner")!.push({ dayIndex: day, recipeId: rid });
         }
-        newSlots.push({ date, meal_type: "dinner", recipe_id: rid, servings: people });
+        newSlots.push({ date, meal_type: "dinner", recipe_id: rid, servings: peopleValue });
       }
     }
 
     if (blockedMiss && hasBlocked) {
-      alert("Brak przepisu spełniającego wymagania (blokady produktów).");
+      alert("Brak przepisu speĹ‚niajÄ…cego wymagania (blokady produktĂłw).");
     }
 
     const { error: slotsErr } = await supabase.from("meal_plan_slots").insert(
@@ -1181,9 +1363,9 @@ export default function MealPlanPage() {
 
       if (!newRecipeId) {
         if (blockedIngredientIds.size > 0) {
-          alert("Brak przepisu spełniającego wymagania (blokady produktów).");
+          alert("Brak przepisu speĹ‚niajÄ…cego wymagania (blokady produktĂłw).");
         } else {
-          alert("Nie znalazłem alternatywnego przepisu.");
+          alert("Nie znalazĹ‚em alternatywnego przepisu.");
         }
         return;
       }
@@ -1197,13 +1379,20 @@ export default function MealPlanPage() {
 
       if (error) {
         console.error(error);
-        alert("Błąd zapisu zamiany do bazy.");
+        alert("BĹ‚Ä…d zapisu zamiany do bazy.");
         return;
       }
 
       setSlots((prev) =>
         prev.map((s) => (slotIdsToUpdate.includes(s.id) ? { ...s, recipe_id: newRecipeId } : s))
       );
+      pushUndoAction({
+        type: "swap",
+        slotIds: slotIdsToUpdate,
+        prevRecipeId: slot.recipe_id,
+        nextRecipeId: newRecipeId,
+      });
+      showToast("Zmieniono przepis.");
     } finally {
       setSwappingSlotIds((prev) => {
         const next = new Set(prev);
@@ -1228,6 +1417,129 @@ export default function MealPlanPage() {
     else await setPreference(slot.recipe_id, "favorite");
   }
 
+  async function blockIngredientFromSlot(ingredientId: number, ingredientName: string) {
+    if (!userId) {
+      alert("Musisz być zalogowany, aby blokować składniki.");
+      return;
+    }
+    if (blockedIngredientIds.has(ingredientId)) return;
+
+    setBlockingIngredientIds((prev) => {
+      const next = new Set(prev);
+      next.add(ingredientId);
+      return next;
+    });
+
+    setBlockedIngredientIds((prev) => {
+      const next = new Set(prev);
+      next.add(ingredientId);
+      return next;
+    });
+
+    const { error } = await supabase
+      .from("user_blocked_ingredients")
+      .upsert({ user_id: userId, ingredient_id: ingredientId }, { onConflict: "user_id,ingredient_id" });
+
+    setBlockingIngredientIds((prev) => {
+      const next = new Set(prev);
+      next.delete(ingredientId);
+      return next;
+    });
+
+    if (error) {
+      setBlockedIngredientIds((prev) => {
+        const next = new Set(prev);
+        next.delete(ingredientId);
+        return next;
+      });
+      console.error("block ingredient error", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+        raw: error,
+      });
+      alert(`Nie udało się zablokować składnika: ${error.message}`);
+      showToast(`Błąd blokady: ${error.message}`);
+      return;
+    }
+
+    pushUndoAction({ type: "blockIngredient", ingredientId, ingredientName });
+    showToast(`Zablokowano: ${ingredientName}`);
+  }
+
+  const handleUndo = useCallback(async () => {
+    if (undoBusy) return;
+    const last = undoStackRef.current[undoStackRef.current.length - 1];
+    if (!last) return;
+
+    undoStackRef.current = undoStackRef.current.slice(0, -1);
+    setUndoCount(undoStackRef.current.length);
+    setUndoBusy(true);
+
+    try {
+      if (last.type === "swap") {
+        const { error } = await supabase
+          .from("meal_plan_slots")
+          .update({ recipe_id: last.prevRecipeId })
+          .in("id", last.slotIds);
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        setSlots((prev) =>
+          prev.map((slot) => (last.slotIds.includes(slot.id) ? { ...slot, recipe_id: last.prevRecipeId } : slot))
+        );
+        showToast("Cofnięto zmianę przepisu.");
+      }
+
+      if (last.type === "blockIngredient") {
+        if (!userId) {
+          throw new Error("Brak użytkownika.");
+        }
+
+        const { error } = await supabase
+          .from("user_blocked_ingredients")
+          .delete()
+          .eq("user_id", userId)
+          .eq("ingredient_id", last.ingredientId);
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        setBlockedIngredientIds((prev) => {
+          const next = new Set(prev);
+          next.delete(last.ingredientId);
+          return next;
+        });
+        showToast(`Cofnięto blokadę: ${last.ingredientName}`);
+      }
+    } catch (err) {
+      undoStackRef.current = [...undoStackRef.current, last].slice(-30);
+      setUndoCount(undoStackRef.current.length);
+      console.error("undo error", err);
+      const message = err instanceof Error ? err.message : "Nie udało się cofnąć operacji.";
+      alert(message);
+      showToast(message);
+    } finally {
+      setUndoBusy(false);
+    }
+  }, [supabase, undoBusy, userId]);
+
+  useEffect(() => {
+    setBottomNavAction({
+      label: undoBusy ? "Cofam..." : "Cofnij",
+      disabled: undoBusy || undoCount === 0,
+      onClick: () => {
+        void handleUndo();
+      },
+    });
+
+    return () => setBottomNavAction(null);
+  }, [handleUndo, setBottomNavAction, undoBusy, undoCount]);
+
   // --- index slots by date|meal ---
   const slotsIndex = useMemo(() => {
     const m = new Map<string, Slot>();
@@ -1250,30 +1562,30 @@ export default function MealPlanPage() {
     const pl = allPlans.find((x) => x.id === planId);
     const name = pl ? planLabel(pl) : planId;
 
-    const ok = window.confirm(`Czy na pewno chcesz usunąć plan: ${name}?\n\nTo usunie też wszystkie sloty planu.`);
+    const ok = window.confirm(`Czy na pewno chcesz usunÄ…Ä‡ plan: ${name}?\n\nTo usunie teĹĽ wszystkie sloty planu.`);
     if (!ok) return;
 
-    // usuń sloty, potem plan
+    // usuĹ„ sloty, potem plan
     const { error: sErr } = await supabase.from("meal_plan_slots").delete().eq("meal_plan_id", planId);
     if (sErr) {
       console.error(sErr);
-      alert("Nie udało się usunąć slotów planu (brak uprawnień / RLS?).");
+      alert("Nie udaĹ‚o siÄ™ usunÄ…Ä‡ slotĂłw planu (brak uprawnieĹ„ / RLS?).");
       return;
     }
 
     const { error: pErr } = await supabase.from("meal_plans").delete().eq("id", planId);
     if (pErr) {
       console.error(pErr);
-      alert("Nie udało się usunąć planu (brak uprawnień / RLS?).");
+      alert("Nie udaĹ‚o siÄ™ usunÄ…Ä‡ planu (brak uprawnieĹ„ / RLS?).");
       return;
     }
 
-    // odśwież listę i wybierz kolejny
+    // odĹ›wieĹĽ listÄ™ i wybierz kolejny
     await refreshPlansList();
 
-    // jeśli usunięty był aktywny
+    // jeĹ›li usuniÄ™ty byĹ‚ aktywny
     if (selectedPlanId === planId) {
-      // po refreshPlansList mamy nowe allPlans dopiero po renderze, więc pobierz listę na szybko:
+      // po refreshPlansList mamy nowe allPlans dopiero po renderze, wiÄ™c pobierz listÄ™ na szybko:
       const { data: plans } = await supabase
         .from("meal_plans")
         .select("id,start_date,days_count,created_at")
@@ -1375,7 +1687,7 @@ export default function MealPlanPage() {
     dinnerSlots.forEach((s, i) => KCode.set(s.id, `K${i + 1}`));
     lunchCookSlots.forEach((s, i) => OCodeByRecipeStart.set(s.id, `O${i + 1}`));
 
-    // dla lunch leftover dni: znajdź najbliższy wcześniejszy cook slot z tym samym recipe_id
+    // dla lunch leftover dni: znajdĹş najbliĹĽszy wczeĹ›niejszy cook slot z tym samym recipe_id
     function getLunchCodeForDay(date: string): { code: string | null; suffix: string | null } {
       const s = getSlot(date, "lunch");
       if (!s || !s.recipe_id) return { code: null, suffix: null };
@@ -1398,14 +1710,14 @@ export default function MealPlanPage() {
           const code = OCodeByRecipeStart.get(prev.id) ?? null;
           return { code, suffix: leftoverOrdinalPL(offset) };
         }
-        // jeżeli inny przepis po drodze, przerywamy
+        // jeĹĽeli inny przepis po drodze, przerywamy
         if (prev && prev.recipe_id !== s.recipe_id) break;
       }
 
-      return { code: null, suffix: "kolejny dzień" };
+      return { code: null, suffix: "kolejny dzieĹ„" };
     }
 
-    // rozpiska dni (Dzień 1: Sx, Oy, Kz)
+    // rozpiska dni (DzieĹ„ 1: Sx, Oy, Kz)
     const planLines: string[] = [];
     for (let i = 0; i < daysISO.length; i++) {
       const d = daysISO[i];
@@ -1431,7 +1743,7 @@ export default function MealPlanPage() {
           ? "K (resztki)"
           : "K?";
 
-      planLines.push(`<li><b>Dzień ${i + 1}:</b> ${escapeHtml(sCode)}, ${escapeHtml(oCode + oSuffix)}, ${escapeHtml(kCode)}</li>`);
+      planLines.push(`<li><b>DzieĹ„ ${i + 1}:</b> ${escapeHtml(sCode)}, ${escapeHtml(oCode + oSuffix)}, ${escapeHtml(kCode)}</li>`);
     }
 
     // sekcje recipes
@@ -1449,13 +1761,13 @@ export default function MealPlanPage() {
 
       const stepsHtml = steps.length
         ? `<ol>${steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>`
-        : `<ol><li>(brak kroków w bazie)</li></ol>`;
+        : `<ol><li>(brak krokĂłw w bazie)</li></ol>`;
 
       return `
   <details class="recipe">
-    <summary><span class="dot"></span><p class="title">${escapeHtml(code)}. ${escapeHtml(title)}${escapeHtml(portionsTxt)}</p><div class="chev">⌄</div></summary>
+    <summary><span class="dot"></span><p class="title">${escapeHtml(code)}. ${escapeHtml(title)}${escapeHtml(portionsTxt)}</p><div class="chev">âŚ„</div></summary>
     <div class="content">
-      <div class="line"><span class="label">Składniki:</span> ${escapeHtml(ingLine)}</div>
+      <div class="line"><span class="label">SkĹ‚adniki:</span> ${escapeHtml(ingLine)}</div>
       ${stepsHtml}
     </div>
   </details>`;
@@ -1473,19 +1785,19 @@ export default function MealPlanPage() {
       .map((s) => buildDetailsForSlot(KCode.get(s.id)!, s, "dinner"))
       .join("\n");
 
-    const title = `Jadłospis i przepisy – ${plan.days_count} dni`;
+    const title = `JadĹ‚ospis i przepisy â€“ ${plan.days_count} dni`;
     const planName = `${planLabel(plan)}.html`;
 
     const lunchMeta =
       lunchSpanDays > 1
-        ? `obiady – ${people * lunchSpanDays} porcji (każdy obiad na ${lunchSpanDays} dni)`
-        : `obiady – ${people} porcje`;
+        ? `obiady â€“ ${people * lunchSpanDays} porcji (kaĹĽdy obiad na ${lunchSpanDays} dni)`
+        : `obiady â€“ ${people} porcje`;
 
     const metaLine = `
-    <b>Porcje:</b> śniadania i kolacje – ${people} porcje, ${lunchMeta}.<br>
-    Składniki i ilości są podane <b>po przecinku</b>.`;
+    <b>Porcje:</b> Ĺ›niadania i kolacje â€“ ${people} porcje, ${lunchMeta}.<br>
+    SkĹ‚adniki i iloĹ›ci sÄ… podane <b>po przecinku</b>.`;
 
-    // HTML (styl jak podałeś)
+    // HTML (styl jak podaĹ‚eĹ›)
     const html = `<!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -1607,8 +1919,8 @@ export default function MealPlanPage() {
   <h1>${escapeHtml(title)} (${people} osoby)</h1>
   <p class="meta">${metaLine}</p>
   <div class="tools">
-    <button class="primary" onclick="toggleAll(true)">Rozwiń wszystko</button>
-    <button onclick="toggleAll(false)">Zwiń wszystko</button>
+    <button class="primary" onclick="toggleAll(true)">RozwiĹ„ wszystko</button>
+    <button onclick="toggleAll(false)">ZwiĹ„ wszystko</button>
   </div>
 </header>
 
@@ -1620,17 +1932,17 @@ export default function MealPlanPage() {
 </div>
 
 <section class="section breakfast">
-  <div class="section-head"><div>Śniadania (${breakfastSlots.length ? `S1–S${breakfastSlots.length}` : "S" })</div><div class="pill">indygo</div></div>
+  <div class="section-head"><div>Ĺšniadania (${breakfastSlots.length ? `S1â€“S${breakfastSlots.length}` : "S" })</div><div class="pill">indygo</div></div>
   ${breakfastDetails || ""}
 </section>
 
 <section class="section lunch">
-  <div class="section-head"><div>Obiady (${lunchCookSlots.length ? `O1–O${lunchCookSlots.length}` : "O"}) – na ${lunchSpanDays} dni każdy</div><div class="pill">cyjan</div></div>
+  <div class="section-head"><div>Obiady (${lunchCookSlots.length ? `O1â€“O${lunchCookSlots.length}` : "O"}) â€“ na ${lunchSpanDays} dni kaĹĽdy</div><div class="pill">cyjan</div></div>
   ${lunchDetails || ""}
 </section>
 
 <section class="section dinner">
-  <div class="section-head"><div>Kolacje (${dinnerSlots.length ? `K1–K${dinnerSlots.length}` : "K"})</div><div class="pill">zieleń</div></div>
+  <div class="section-head"><div>Kolacje (${dinnerSlots.length ? `K1â€“K${dinnerSlots.length}` : "K"})</div><div class="pill">zieleĹ„</div></div>
   ${dinnerDetails || ""}
 </section>
 
@@ -1648,14 +1960,14 @@ export default function MealPlanPage() {
   }
 
   async function downloadPlan(planId: string) {
-    // jeśli to aktywny plan - użyj danych z pamięci
+    // jeĹ›li to aktywny plan - uĹĽyj danych z pamiÄ™ci
     if (activePlan && activePlan.id === planId) {
       const { html, filename } = generateExportHtml(activePlan, slots);
       fileDownload(filename, html);
       return;
     }
 
-    // inaczej dociągnij z bazy
+    // inaczej dociÄ…gnij z bazy
     const { data: pl, error: pErr } = await supabase
       .from("meal_plans")
       .select("id,start_date,days_count,created_at")
@@ -1664,7 +1976,7 @@ export default function MealPlanPage() {
 
     if (pErr || !pl) {
       console.error(pErr);
-      alert("Nie udało się pobrać planu do exportu.");
+      alert("Nie udaĹ‚o siÄ™ pobraÄ‡ planu do exportu.");
       return;
     }
 
@@ -1675,7 +1987,7 @@ export default function MealPlanPage() {
 
     if (sErr) {
       console.error(sErr);
-      alert("Nie udało się pobrać slotów do exportu.");
+      alert("Nie udaĹ‚o siÄ™ pobraÄ‡ slotĂłw do exportu.");
       return;
     }
 
@@ -1688,15 +2000,15 @@ export default function MealPlanPage() {
   const plansPanel = (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="section-title">Moje jadłospisy</h2>
-        <button onClick={refreshPlansList} title="Odśwież listę" className="btn btn-secondary text-xs">
-          Odśwież
+        <h2 className="section-title">Moje jadĹ‚ospisy</h2>
+        <button onClick={refreshPlansList} title="OdĹ›wieĹĽ listÄ™" className="btn btn-secondary text-xs">
+          OdĹ›wieĹĽ
         </button>
       </div>
 
       <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
         {allPlans.length === 0 ? (
-          <div className="text-sm text-slate-500">Brak planów.</div>
+          <div className="text-sm text-slate-500">Brak planĂłw.</div>
         ) : (
           allPlans.map((pl) => {
             const isActive = pl.id === activePlan?.id;
@@ -1711,11 +2023,11 @@ export default function MealPlanPage() {
                 <button
                   onClick={() => goToPlan(pl.id)}
                   className="flex-1 text-left"
-                  title="Kliknij, aby przejść do tego planu"
+                  title="Kliknij, aby przejĹ›Ä‡ do tego planu"
                 >
                   <div className="font-semibold text-slate-900">{planLabel(pl)}</div>
                   <div className="mt-1 text-xs text-slate-500">
-                    start: {pl.start_date} • dni: {pl.days_count}
+                    start: {pl.start_date} â€˘ dni: {pl.days_count}
                   </div>
                 </button>
 
@@ -1729,7 +2041,7 @@ export default function MealPlanPage() {
                     title="Pobierz HTML"
                     className="btn btn-secondary text-xs"
                   >
-                    ⬇️
+                    â¬‡ď¸Ź
                   </button>
 
                   <button
@@ -1738,10 +2050,10 @@ export default function MealPlanPage() {
                       e.stopPropagation();
                       deletePlan(pl.id);
                     }}
-                    title="Usuń plan"
+                    title="UsuĹ„ plan"
                     className="btn btn-danger text-xs"
                   >
-                    🗑️
+                    đź—‘ď¸Ź
                   </button>
                 </div>
               </div>
@@ -1755,7 +2067,7 @@ export default function MealPlanPage() {
   if (loading) {
     return (
       <main className="card">
-        <p className="text-sm text-slate-600">Ładowanie…</p>
+        <p className="text-sm text-slate-600">Ĺadowanieâ€¦</p>
       </main>
     );
   }
@@ -1764,8 +2076,8 @@ export default function MealPlanPage() {
     <main className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Jadłospis</h1>
-          <p className="text-sm text-slate-600">Planowanie posiłków z szybkim podglądem składników.</p>
+          <h1 className="text-2xl font-semibold text-slate-900">JadĹ‚ospis</h1>
+          <p className="text-sm text-slate-600">Planowanie posiĹ‚kĂłw z szybkim podglÄ…dem skĹ‚adnikĂłw.</p>
         </div>
         <button onClick={() => setPlansDrawerOpen(true)} className="btn btn-secondary lg:hidden">
           Plany
@@ -1775,7 +2087,7 @@ export default function MealPlanPage() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
           <section className="card space-y-4">
-            <h2 className="section-title">Utwórz nowy plan</h2>
+            <h2 className="section-title">UtwĂłrz nowy plan</h2>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
@@ -1784,75 +2096,87 @@ export default function MealPlanPage() {
               </label>
 
               <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-                Liczba dni (1–31)
+                Liczba dni (1â€“31)
                 <input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={daysCount}
-                  onChange={(e) => setDaysCount(Number(e.target.value))}
+                  type="text"
+                  inputMode="numeric"
+                  value={daysCountText}
+                  onChange={(e) => setDaysCountText(sanitizeDigits(e.target.value))}
+                  onBlur={commitDaysCountInput}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitDaysCountInput();
+                  }}
                   className="input"
                 />
               </label>
 
               <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-                Liczba osób (domyślne porcje na posiłek)
+                Liczba osĂłb (domyĹ›lne porcje na posiĹ‚ek)
                 <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={people}
-                  onChange={(e) => setPeople(Number(e.target.value))}
+                  type="text"
+                  inputMode="numeric"
+                  value={peopleText}
+                  onChange={(e) => setPeopleText(sanitizeDigits(e.target.value))}
+                  onBlur={commitPeopleInput}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitPeopleInput();
+                  }}
                   className="input"
                 />
               </label>
 
               <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-                Obiad gotuję na ile dni (np. 2 = gotuję raz, potem resztki)
+                Obiad gotujÄ™ na ile dni (np. 2 = gotujÄ™ raz, potem resztki)
                 <input
-                  type="number"
-                  min={1}
-                  max={7}
-                  value={lunchSpanDays}
-                  onChange={(e) => setLunchSpanDays(Number(e.target.value))}
+                  type="text"
+                  inputMode="numeric"
+                  value={lunchSpanDaysText}
+                  onChange={(e) => setLunchSpanDaysText(sanitizeDigits(e.target.value))}
+                  onBlur={commitLunchSpanInput}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitLunchSpanInput();
+                  }}
                   className="input"
                 />
               </label>
 
               <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 sm:col-span-2">
-                Cooldown (nie powtarzaj przez X dni, 0 = wyłącz)
+                Cooldown (nie powtarzaj przez X dni, 0 = wyĹ‚Ä…cz)
                 <input
-                  type="number"
-                  min={0}
-                  max={60}
-                  value={cooldownDays}
-                  onChange={(e) => setCooldownDays(Number(e.target.value))}
+                  type="text"
+                  inputMode="numeric"
+                  value={cooldownDaysText}
+                  onChange={(e) => setCooldownDaysText(sanitizeDigits(e.target.value))}
+                  onBlur={commitCooldownInput}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitCooldownInput();
+                  }}
                   className="input"
                 />
               </label>
 
               <div className="relative sm:col-span-2">
                 <label className="block text-sm font-semibold text-slate-700">
-                  Składniki do wykorzystania (po nazwie)
+                  SkĹ‚adniki do wykorzystania (po nazwie)
                 </label>
 
                 {selectedIngredients.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {selectedIngredients.map((ing) => (
-                      <span key={ing.id} className="chip" title={`#${ing.id} • ${ing.category ?? "bez kategorii"}`}>
+                      <span key={ing.id} className="chip" title={`#${ing.id} â€˘ ${ing.category ?? "bez kategorii"}`}>
                         {ing.name}
                         <button
                           onClick={() => removeSelectedIngredient(ing.id)}
                           className="text-xs text-slate-500 hover:text-slate-900"
-                          title="Usuń"
+                          title="UsuĹ„"
                         >
-                          ✖
+                          âś–
                         </button>
                       </span>
                     ))}
 
                     <button onClick={clearSelectedIngredients} className="btn btn-secondary text-xs">
-                      Wyczyść
+                      WyczyĹ›Ä‡
                     </button>
                   </div>
                 )}
@@ -1865,7 +2189,7 @@ export default function MealPlanPage() {
                   }}
                   onFocus={() => setIngredientSuggestOpen(true)}
                   onBlur={() => setTimeout(() => setIngredientSuggestOpen(false), 150)}
-                  placeholder="Wpisz min. 2 litery, np. jaj, mle, chle…"
+                  placeholder="Wpisz min. 2 litery, np. jaj, mle, chleâ€¦"
                   className="input mt-3"
                 />
 
@@ -1877,11 +2201,11 @@ export default function MealPlanPage() {
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => addSelectedIngredient(ing.id)}
                         className="w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-slate-50"
-                        title={`Dodaj • #${ing.id}`}
+                        title={`Dodaj â€˘ #${ing.id}`}
                       >
                         <div className="font-semibold text-slate-900">{ing.name}</div>
                         <div className="text-xs text-slate-500">
-                          {ing.category ?? "bez kategorii"} • jednostka: {ing.unit} • ID: {ing.id}
+                          {ing.category ?? "bez kategorii"} â€˘ jednostka: {ing.unit} â€˘ ID: {ing.id}
                         </div>
                       </button>
                     ))}
@@ -1896,7 +2220,7 @@ export default function MealPlanPage() {
                       onChange={(e) => setUseIngredientIdsHard(e.target.checked)}
                       className="h-4 w-4"
                     />
-                    Tryb twardy: wymagaj wszystkich wybranych składników
+                    Tryb twardy: wymagaj wszystkich wybranych skĹ‚adnikĂłw
                   </label>
                 </div>
               </div>
@@ -1908,12 +2232,12 @@ export default function MealPlanPage() {
                   onChange={(e) => setPreferPantry(e.target.checked)}
                   className="h-4 w-4"
                 />
-                Preferuj przepisy pasujące do Pantry
+                Preferuj przepisy pasujÄ…ce do Pantry
               </label>
 
               <div className="sm:col-span-2">
                 <button onClick={createPlan} disabled={busy} className="btn btn-primary w-full sm:w-auto">
-                  {busy ? "Tworzę…" : "Utwórz plan"}
+                  {busy ? "TworzÄ™â€¦" : "UtwĂłrz plan"}
                 </button>
               </div>
             </div>
@@ -1922,7 +2246,7 @@ export default function MealPlanPage() {
           <section className="card-muted space-y-2">
             <h2 className="section-title">Sterowanie</h2>
             <p className="text-sm text-slate-600">
-              Swipe: <b>lewo</b> = zamień • <b>prawo</b> = 🚫 nie lubię + zamień • <b>Kroki ▼</b> = instrukcja.
+              Swipe: <b>lewo</b> = zamieĹ„ â€˘ <b>prawo</b> = đźš« nie lubiÄ™ + zamieĹ„ â€˘ <b>Kroki â–Ľ</b> = instrukcja.
             </p>
           </section>
 
@@ -1930,12 +2254,12 @@ export default function MealPlanPage() {
             <h2 className="section-title">Aktualny plan</h2>
 
             {!activePlan ? (
-              <p className="text-sm text-slate-600">Nie masz jeszcze planu. Utwórz nowy powyżej.</p>
+              <p className="text-sm text-slate-600">Nie masz jeszcze planu. UtwĂłrz nowy powyĹĽej.</p>
             ) : (
               <div className="space-y-3">
                 <p className="text-sm text-slate-600">
-                  Plan: <b className="text-slate-900">{planLabel(activePlan)}</b> • start:{" "}
-                  <b className="text-slate-900">{activePlan.start_date}</b> • dni:{" "}
+                  Plan: <b className="text-slate-900">{planLabel(activePlan)}</b> â€˘ start:{" "}
+                  <b className="text-slate-900">{activePlan.start_date}</b> â€˘ dni:{" "}
                   <b className="text-slate-900">{activePlan.days_count}</b>
                 </p>
 
@@ -1960,10 +2284,13 @@ export default function MealPlanPage() {
                           const recipeId = recipe ? recipe.id : null;
                           const ingredientRows = recipeId ? recipeIngredientsByRecipe.get(recipeId) ?? [] : [];
                           const recipeBaseServings = recipe?.base_servings ?? null;
+                          const servingsText = slot
+                            ? (servingsDraftBySlotId[slot.id] ?? String(slot.servings))
+                            : "";
 
                           return (
                             <MealSlotRow
-                              key={`${date}|${mt}|${recipeId ?? "none"}`}
+                              key={slot?.id ?? `${date}|${mt}`}
                               slot={slot}
                               label={mealLabel(mt)}
                               title={title}
@@ -1973,11 +2300,19 @@ export default function MealPlanPage() {
                               steps={steps}
                               ingredientRows={ingredientRows}
                               recipeBaseServings={recipeBaseServings}
+                              detailsOpen={slot ? openSlotIds.has(slot.id) : false}
                               onReplace={(s) => replaceSlot(s)}
                               onDislikeAndReplace={dislikeAndReplace}
                               onToggleFavorite={toggleFavorite}
                               pref={pref}
-                              onUpdateServings={updateServings}
+                              servingsText={servingsText}
+                              onServingsTextChange={updateServingsDraft}
+                              onCommitServings={commitServingsDraft}
+                              onToggleDetails={toggleSlotDetails}
+                              onBlockIngredient={blockIngredientFromSlot}
+                              pantryIds={pantryIds}
+                              blockedIngredientIds={blockedIngredientIds}
+                              blockingIngredientIds={blockingIngredientIds}
                               onOpenSearch={openSearchPanel}
                               onCloseSearch={closeSearchPanel}
                               onSearchQueryChange={setSearchQuery}
@@ -2007,9 +2342,16 @@ export default function MealPlanPage() {
         </aside>
       </div>
 
-      <MobileDrawer open={plansDrawerOpen} onClose={() => setPlansDrawerOpen(false)} title="Moje jadłospisy" side="bottom">
+      <MobileDrawer open={plansDrawerOpen} onClose={() => setPlansDrawerOpen(false)} title="Moje jadĹ‚ospisy" side="bottom">
         {plansPanel}
       </MobileDrawer>
+
+      {toastMsg && (
+        <div className="pointer-events-none fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg">
+          {toastMsg}
+        </div>
+      )}
     </main>
   );
 }
+

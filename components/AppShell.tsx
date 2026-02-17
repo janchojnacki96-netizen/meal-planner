@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import SidebarNav from "./SidebarNav";
 import MobileDrawer from "./MobileDrawer";
+import { BottomNavActionProvider, type BottomNavAction } from "./BottomNavActionContext";
 import { PRIMARY_NAV_LINKS, SECONDARY_NAV_LINKS } from "@/lib/nav-links";
 
 type AppShellProps = {
@@ -25,15 +26,18 @@ function getTitle(pathname: string): string {
 export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
+  const [bottomNavAction, setBottomNavAction] = useState<BottomNavAction | null>(null);
 
   const pageTitle = useMemo(() => getTitle(pathname), [pathname]);
+  const isMealPlanRoute = pathname.startsWith("/meal-plan");
 
   if (pathname === "/login") {
     return <>{children}</>;
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <BottomNavActionProvider value={{ setBottomNavAction }}>
+      <div className="min-h-screen bg-slate-50 text-slate-900">
       <MobileDrawer open={navOpen} onClose={() => setNavOpen(false)} title="Menu" side="left">
         <SidebarNav onNavigate={() => setNavOpen(false)} />
       </MobileDrawer>
@@ -72,7 +76,7 @@ export default function AppShell({ children }: AppShellProps) {
       </div>
 
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/90 backdrop-blur lg:hidden">
-        <div className="mx-auto grid max-w-6xl grid-cols-4 px-2">
+        <div className={`mx-auto grid max-w-6xl px-2 ${isMealPlanRoute ? "grid-cols-5" : "grid-cols-4"}`}>
           {PRIMARY_NAV_LINKS.map((link) => {
             const active = link.matchPrefix ? pathname.startsWith(link.matchPrefix) : pathname === link.href;
             return (
@@ -89,8 +93,25 @@ export default function AppShell({ children }: AppShellProps) {
               </Link>
             );
           })}
+          {isMealPlanRoute && (
+            <button
+              type="button"
+              onClick={() => bottomNavAction?.onClick()}
+              disabled={bottomNavAction?.disabled ?? true}
+              className={`flex flex-col items-center gap-1 px-2 py-2 text-[11px] font-medium transition ${
+                bottomNavAction && !(bottomNavAction.disabled ?? false)
+                  ? "text-slate-900"
+                  : "text-slate-400"
+              }`}
+              aria-label={bottomNavAction?.label ?? "Cofnij"}
+            >
+              <span className="text-base">↩</span>
+              <span className="truncate">{bottomNavAction?.label ?? "Cofnij"}</span>
+            </button>
+          )}
         </div>
       </nav>
-    </div>
+      </div>
+    </BottomNavActionProvider>
   );
 }
