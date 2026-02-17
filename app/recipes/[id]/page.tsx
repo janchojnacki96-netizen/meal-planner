@@ -97,63 +97,71 @@ export default function RecipeDetailsPage() {
 
   if (loading) {
     return (
-      <main style={{ maxWidth: 820, margin: "20px auto", padding: 16 }}>
-        <p>Ładowanie…</p>
+      <main className="card">
+        <p className="text-sm text-slate-600">Ładowanie…</p>
       </main>
     );
   }
 
   if (!recipe) {
     return (
-      <main style={{ maxWidth: 820, margin: "20px auto", padding: 16 }}>
-        <p>Nie znaleziono przepisu.</p>
-        <Link href="/recipes">← Wróć do listy</Link>
+      <main className="space-y-3">
+        <div className="card space-y-2">
+          <p className="text-sm text-slate-600">Nie znaleziono przepisu.</p>
+          <Link href="/recipes" className="text-sm font-semibold text-slate-900 hover:underline">
+            ← Wróć do listy
+          </Link>
+        </div>
       </main>
     );
   }
 
   return (
-    <main style={{ maxWidth: 820, margin: "20px auto", padding: 16 }}>
-      <Link href="/recipes">← Wróć do listy</Link>
+    <main className="space-y-6">
+      <Link href="/recipes" className="text-sm font-semibold text-slate-600 hover:text-slate-900 hover:underline">
+        ← Wróć do listy
+      </Link>
 
-      <h1 style={{ fontSize: 26, fontWeight: 800, marginTop: 10 }}>
-        {recipe.name} <span style={{ opacity: 0.6, fontSize: 16 }}>#{recipe.id}</span>
-      </h1>
+      <header className="space-y-2">
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {recipe.name} <span className="text-sm text-slate-400">#{recipe.id}</span>
+        </h1>
+        <p className="text-sm text-slate-600">
+          typ: <b className="text-slate-900">{recipe.meal_type}</b> • bazowe porcje:{" "}
+          <b className="text-slate-900">{recipe.base_servings}</b>
+        </p>
+      </header>
 
-      <p style={{ opacity: 0.85 }}>
-        typ: <b>{recipe.meal_type}</b> • bazowe porcje: <b>{recipe.base_servings}</b>
-      </p>
-
-      <section style={{ marginTop: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700 }}>Składniki</h2>
-        <ul>
+      <section className="card space-y-2">
+        <h2 className="section-title">Składniki</h2>
+        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
           {items.map((it, idx) => (
             <li key={idx}>
-              {it.amount} {it.unit} — {it.ingredient?.name}{" "}
-              <span style={{ opacity: 0.6 }}>#{it.ingredient?.id}</span>
+              {it.amount ?? "—"} {it.unit ?? ""} — {it.ingredient?.name}{" "}
+              <span className="text-xs text-slate-400">#{it.ingredient?.id}</span>
             </li>
           ))}
-          {!items.length && <li style={{ opacity: 0.8 }}>Brak składników.</li>}
+          {!items.length && <li className="text-sm text-slate-500">Brak składników.</li>}
         </ul>
       </section>
 
-      <section style={{ marginTop: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700 }}>Kroki</h2>
-        <ol>
+      <section className="card space-y-2">
+        <h2 className="section-title">Kroki</h2>
+        <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700">
           {(recipe.steps ?? []).map((s, idx) => (
-            <li key={idx} style={{ marginBottom: 6 }}>
+            <li key={idx} className="leading-relaxed">
               {s}
             </li>
           ))}
           {(!recipe.steps || recipe.steps.length === 0) && (
-            <li style={{ opacity: 0.8 }}>Brak kroków.</li>
+            <li className="text-sm text-slate-500">Brak kroków.</li>
           )}
         </ol>
       </section>
 
-      <section style={{ marginTop: 16 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700 }}>Tagi</h2>
-        <p>{recipe.tags?.length ? recipe.tags.join(", ") : "—"}</p>
+      <section className="card space-y-2">
+        <h2 className="section-title">Tagi</h2>
+        <p className="text-sm text-slate-600">{recipe.tags?.length ? recipe.tags.join(", ") : "—"}</p>
       </section>
     </main>
   );

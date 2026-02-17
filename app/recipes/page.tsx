@@ -229,49 +229,37 @@ export default function RecipesPage() {
   }, [recipeViewList, recipeIngs, q, mealType, onlyPossible, sortByMatch, requiredIdsText]);
 
   return (
-    <main style={{ maxWidth: 980, margin: "20px auto", padding: 16 }}>
-      <header>
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Przepisy</h1>
-        <p style={{ opacity: 0.8 }}>
-          Dopasowanie do Pantry: pokazuje ile składników do przepisu masz w domu. Możesz też oznaczać ⭐/🚫.
+    <main className="space-y-6">
+      <header className="space-y-2">
+        <h1 className="text-2xl font-semibold text-slate-900">Przepisy</h1>
+        <p className="text-sm text-slate-600">
+          Dopasowanie do Pantry pokazuje ile składników do przepisu masz w domu. Możesz też oznaczać ⭐/🚫.
         </p>
       </header>
 
-      <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+      <section className="card space-y-3">
         <input
           placeholder="Szukaj po nazwie lub ID (np. 5001)"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          style={{ padding: 10 }}
+          className="input"
         />
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <select
-            value={mealType}
-            onChange={(e) => setMealType(e.target.value as "" | MealType)}
-            style={{ padding: 10 }}
-          >
+        <div className="flex flex-wrap items-center gap-3">
+          <select value={mealType} onChange={(e) => setMealType(e.target.value as "" | MealType)} className="input">
             <option value="">Wszystkie typy</option>
             <option value="breakfast">Śniadanie</option>
             <option value="lunch">Obiad</option>
             <option value="dinner">Kolacja</option>
           </select>
 
-          <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <input
-              type="checkbox"
-              checked={onlyPossible}
-              onChange={(e) => setOnlyPossible(e.target.checked)}
-            />
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={onlyPossible} onChange={(e) => setOnlyPossible(e.target.checked)} className="h-4 w-4" />
             Tylko możliwe (mam wszystkie składniki)
           </label>
 
-          <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <input
-              type="checkbox"
-              checked={sortByMatch}
-              onChange={(e) => setSortByMatch(e.target.checked)}
-            />
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={sortByMatch} onChange={(e) => setSortByMatch(e.target.checked)} className="h-4 w-4" />
             Sortuj wg dopasowania
           </label>
         </div>
@@ -280,64 +268,64 @@ export default function RecipesPage() {
           placeholder="Wymagane ID składników (np. 101,103)"
           value={requiredIdsText}
           onChange={(e) => setRequiredIdsText(e.target.value)}
-          style={{ padding: 10 }}
+          className="input"
         />
-      </div>
+      </section>
 
       {loading ? (
-        <p style={{ marginTop: 16 }}>Ładowanie…</p>
+        <p className="text-sm text-slate-500">Ładowanie…</p>
       ) : (
-        <ul style={{ listStyle: "none", padding: 0, marginTop: 12, display: "grid", gap: 10 }}>
+        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((r) => {
             const pref = prefs.get(r.id);
 
             return (
-              <li key={r.id} style={{ border: "1px solid #ddd", borderRadius: 10, padding: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700 }}>
-                      <Link href={`/recipes/${r.id}`}>{r.name}</Link>{" "}
-                      <span style={{ opacity: 0.6 }}>#{r.id}</span>
-                    </div>
-
-                    <div style={{ opacity: 0.8, fontSize: 13 }}>
-                      typ: {r.meal_type} • bazowe porcje: {r.base_servings}
-                      {r.tags?.length ? ` • tagi: ${r.tags.join(", ")}` : ""}
-                    </div>
+              <li key={r.id} className="card flex flex-col gap-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold text-slate-900">
+                    <Link href={`/recipes/${r.id}`} className="hover:underline">
+                      {r.name}
+                    </Link>{" "}
+                    <span className="text-xs text-slate-400">#{r.id}</span>
                   </div>
 
-                  <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontWeight: 700 }}>
-                        {r.haveIngredients}/{r.totalIngredients}
-                      </div>
-                      <div style={{ opacity: 0.8, fontSize: 13 }}>brak: {r.missingIngredients}</div>
-                    </div>
+                  <div className="text-xs text-slate-500">
+                    typ: {r.meal_type} • bazowe porcje: {r.base_servings}
+                    {r.tags?.length ? ` • tagi: ${r.tags.join(", ")}` : ""}
+                  </div>
+                </div>
 
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <button
-                        onClick={() => setPreference(r.id, pref === "favorite" ? null : "favorite")}
-                        title="Ulubione"
-                        style={{ padding: "6px 10px" }}
-                      >
-                        {pref === "favorite" ? "⭐" : "☆"}
-                      </button>
-
-                      <button
-                        onClick={() => setPreference(r.id, pref === "dislike" ? null : "dislike")}
-                        title="Nie lubię"
-                        style={{ padding: "6px 10px" }}
-                      >
-                        {pref === "dislike" ? "🚫" : "—"}
-                      </button>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs text-slate-500">
+                    <div className="text-sm font-semibold text-slate-900">
+                      {r.haveIngredients}/{r.totalIngredients}
                     </div>
+                    brak: {r.missingIngredients}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPreference(r.id, pref === "favorite" ? null : "favorite")}
+                      title="Ulubione"
+                      className="btn btn-secondary text-xs"
+                    >
+                      {pref === "favorite" ? "⭐" : "☆"}
+                    </button>
+
+                    <button
+                      onClick={() => setPreference(r.id, pref === "dislike" ? null : "dislike")}
+                      title="Nie lubię"
+                      className="btn btn-secondary text-xs"
+                    >
+                      {pref === "dislike" ? "🚫" : "—"}
+                    </button>
                   </div>
                 </div>
               </li>
             );
           })}
 
-          {!filtered.length && <li style={{ opacity: 0.8 }}>Brak wyników.</li>}
+          {!filtered.length && <li className="text-sm text-slate-500">Brak wyników.</li>}
         </ul>
       )}
     </main>

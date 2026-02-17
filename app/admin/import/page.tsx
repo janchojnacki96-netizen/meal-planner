@@ -104,58 +104,55 @@ export default function AdminImportPage() {
   }
 
   return (
-    <main style={{ maxWidth: 760, margin: "20px auto", padding: 16 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 800 }}>Admin — Import CSV</h1>
-      <p style={{ opacity: 0.8 }}>
-        Import działa tylko dla kont z emailami wpisanymi w <code>ADMIN_EMAILS</code>.
-      </p>
+    <main className="space-y-6">
+      <header className="space-y-2">
+        <h1 className="text-2xl font-semibold text-slate-900">Admin — Import CSV</h1>
+        <p className="text-sm text-slate-600">
+          Import działa tylko dla kont z emailami wpisanymi w <code className="rounded bg-slate-100 px-1">ADMIN_EMAILS</code>.
+        </p>
+      </header>
 
-      <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <b>ingredients.csv</b>
+      <section className="card space-y-4">
+        <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+          ingredients.csv
           <input
             type="file"
             accept=".csv,text/csv"
             onChange={(e) => setIngredients(e.target.files?.[0] ?? null)}
+            className="input"
           />
         </label>
 
-        <label style={{ display: "grid", gap: 6 }}>
-          <b>recipes.csv</b>
+        <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+          recipes.csv
           <input
             type="file"
             accept=".csv,text/csv"
             onChange={(e) => setRecipes(e.target.files?.[0] ?? null)}
+            className="input"
           />
         </label>
 
-        <label style={{ display: "grid", gap: 6 }}>
-          <b>recipe_ingredients.csv</b>
+        <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+          recipe_ingredients.csv
           <input
             type="file"
             accept=".csv,text/csv"
             onChange={(e) => setRecipeIngredients(e.target.files?.[0] ?? null)}
+            className="input"
           />
         </label>
 
-        <button onClick={upload} disabled={busy}>
+        <button onClick={upload} disabled={busy} className="btn btn-primary">
           {busy ? "Importuję…" : "Importuj"}
         </button>
 
         {msg && (
-          <pre
-            style={{
-              marginTop: 6,
-              whiteSpace: "pre-wrap",
-              border: "1px solid #ddd",
-              borderRadius: 10,
-              padding: 10,
-            }}
-          >
+          <pre className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
             {msg}
           </pre>
         )}
-      </div>
+      </section>
     </main>
   );
 }

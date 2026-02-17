@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { buildPlanVersionMap, formatPlanLabel } from "@/lib/plans";
+import MobileDrawer from "@/components/MobileDrawer";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 
@@ -135,6 +136,7 @@ export default function ShoppingListPage() {
 
   // UI
   const [hideZero, setHideZero] = useState(true);
+  const [plansDrawerOpen, setPlansDrawerOpen] = useState(false);
 
   const loading = initialLoading || planLoading;
   const selectedPlanIdsArray = useMemo(() => Array.from(selectedPlanIds), [selectedPlanIds]);
@@ -666,318 +668,312 @@ export default function ShoppingListPage() {
     }
   }
 
+  const bulkActionButtons = (
+    <>
+      <button
+        onClick={() => setSelectedPlanIds(new Set(allPlans.map((pl) => pl.id)))}
+        disabled={allPlans.length === 0 || selectedPlanIds.size === allPlans.length}
+        className="btn btn-secondary text-xs"
+      >
+        Zaznacz wszystkie
+      </button>
+      <button
+        onClick={() => setSelectedPlanIds(new Set())}
+        disabled={selectedPlanIds.size === 0}
+        className="btn btn-secondary text-xs"
+      >
+        Wyczyść
+      </button>
+      <button
+        onClick={transferAllToPantry}
+        disabled={computedItems.length === 0 || bulkTransferBusy}
+        className="btn btn-primary text-xs"
+      >
+        {bulkTransferLabel}
+      </button>
+      <button
+        onClick={() => deleteAllExtras()}
+        disabled={extras.length === 0 || bulkExtrasBusy}
+        className="btn btn-secondary text-xs"
+      >
+        {bulkExtrasLabel}
+      </button>
+    </>
+  );
+
+  const plansPanel = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="section-title">Wybierz plany</h2>
+        <span className="badge">{selectedPlanIds.size}</span>
+      </div>
+      <div className="flex flex-wrap gap-2">{bulkActionButtons}</div>
+
+      <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+        {allPlans.length === 0 ? (
+          <div className="text-sm text-slate-500">Brak planów.</div>
+        ) : (
+          allPlans.map((pl) => {
+            const checked = selectedPlanIds.has(pl.id);
+
+            return (
+              <label
+                key={pl.id}
+                className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => {
+                    const isChecked = e.target.checked;
+                    setSelectedPlanIds((prev) => {
+                      const next = new Set(prev);
+                      if (isChecked) next.add(pl.id);
+                      else next.delete(pl.id);
+                      return next;
+                    });
+                  }}
+                  className="mt-1 h-4 w-4"
+                />
+                <div>
+                  <div className="font-semibold text-slate-900">{planLabel(pl)}</div>
+                  <div className="text-xs text-slate-500">
+                    start: {pl.start_date} • dni: {pl.days_count}
+                  </div>
+                </div>
+              </label>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
-      <main style={{ maxWidth: 1200, margin: "20px auto", padding: 16 }}>
-        <p>Ładowanie...</p>
+      <main className="card">
+        <p className="text-sm text-slate-600">Ładowanie...</p>
       </main>
     );
   }
 
   return (
-    <main style={{ maxWidth: 1200, margin: "20px auto", padding: 16 }}>
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-      <header style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800 }}>Lista zakupów</h1>
-                    <p style={{ opacity: 0.8 }}>
-            Wybrane plany: <b>{selectedPlanIds.size}</b>
-          </p>
-          {allPlans.length === 0 && (
-            <p style={{ opacity: 0.8 }}>Brak planu - przejdź do jadłospisu i wygeneruj plan.</p>
+    <main className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-6">
+          <header className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-900">Lista zakupów</h1>
+              <p className="text-sm text-slate-600">
+                Wybrane plany: <b className="text-slate-900">{selectedPlanIds.size}</b>
+              </p>
+              {allPlans.length === 0 && (
+                <p className="text-sm text-slate-500">
+                  Brak planu - przejdź do jadłospisu i wygeneruj plan.
+                </p>
+              )}
+            </div>
+            <button onClick={() => setPlansDrawerOpen(true)} className="btn btn-secondary lg:hidden">
+              Wybierz plany
+            </button>
+          </header>
+
+          {loadError && (
+            <section className="card border-amber-200 bg-amber-50 text-amber-900">
+              <b>Uwaga:</b> {loadError}
+            </section>
           )}
-        </div>
-      </header>
 
-      {loadError && (
-        <section style={{ marginTop: 12, border: "1px solid #f2c94c", borderRadius: 12, padding: 12, background: "#fff9db" }}>
-          <b>Uwaga:</b> {loadError}
-        </section>
-      )}
+          <section className="card space-y-2">
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={hideZero}
+                onChange={(e) => setHideZero(e.target.checked)}
+                className="h-4 w-4"
+              />
+              Ukryj produkty (do kupienia = 0)
+            </label>
+            <p className="text-xs text-slate-500">
+              Zaznaczenie jako kupione przenosi ilość do Pantry. Jeśli nie wpiszesz ilości, użyjemy wartości do kupienia.
+            </p>
+          </section>
 
-      <section style={{ marginTop: 12, border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input type="checkbox" checked={hideZero} onChange={(e) => setHideZero(e.target.checked)} />
-          Ukryj produkty (do kupienia = 0)
-        </label>
-        <p style={{ marginTop: 8, opacity: 0.75, fontSize: 13 }}>
-          Zaznaczenie jako kupione przenosi ilość do Pantry. Jeśli nie wpiszesz ilości, użyjemy wartości do kupienia.
-        </p>
-      </section>
+          <section className="space-y-4">
+            {selectedPlanIds.size === 0 ? (
+              <p className="text-sm text-slate-600">Zaznacz co najmniej 1 plan.</p>
+            ) : computed.categories.length === 0 ? (
+              <p className="text-sm text-slate-600">
+                Nic do pokazania. Spróbuj odznaczyć filtr Ukryj do kupienia = 0.
+              </p>
+            ) : (
+              computed.categories.map((cat) => {
+                const items = computed.grouped.get(cat) ?? [];
+                const visible = hideZero ? items.filter((x) => x.toBuy > 0) : items;
+                if (visible.length === 0) return null;
 
-      {/* LISTA Z BAZY */}
-      <section style={{ marginTop: 16 }}>
-        {selectedPlanIds.size === 0 ? (
-          <p style={{ opacity: 0.85 }}>Zaznacz co najmniej 1 plan.</p>
-        ) : computed.categories.length === 0 ? (
-          <p style={{ opacity: 0.85 }}>
-            Nic do pokazania. Spróbuj odznaczyć filtr Ukryj do kupienia = 0.
-          </p>
-        ) : (
-          computed.categories.map((cat) => {
-            const items = computed.grouped.get(cat) ?? [];
-            const visible = hideZero ? items.filter((x) => x.toBuy > 0) : items;
-            if (visible.length === 0) return null;
+                return (
+                  <details key={cat} className="card" open>
+                    <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-slate-900">
+                      <span>{cat}</span>
+                      <span className="badge">{visible.length}</span>
+                    </summary>
 
-            return (
-              <div key={cat} style={{ marginBottom: 16 }}>
-                <h2 style={{ fontSize: 16, fontWeight: 800, marginBottom: 8 }}>{cat}</h2>
+                    <div className="mt-3 space-y-3">
+                      {visible.map((it) => {
+                        const done = getDone(it.ingredient_id);
+                        const disabled = busyIds.has(it.ingredient_id);
 
-                <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-                  {visible.map((it) => {
-                    const done = getDone(it.ingredient_id);
-                    const disabled = busyIds.has(it.ingredient_id);
+                        const qtyStr = getQtyInput(it.ingredient_id, it.toBuy);
+                        const currentInput = inputQty.get(it.ingredient_id) ?? qtyStr;
 
-                    const qtyStr = getQtyInput(it.ingredient_id, it.toBuy);
-                    const currentInput = inputQty.get(it.ingredient_id) ?? qtyStr;
+                        const pantryFlag =
+                          it.pantryQty === null
+                            ? pantry.has(it.ingredient_id)
+                              ? "oznaczone jako mam"
+                              : "nie mam"
+                            : `w pantry: ${fmtQty(it.pantryQty)} ${it.unit}`;
 
-                    const pantryFlag =
-                      it.pantryQty === null
-                        ? pantry.has(it.ingredient_id)
-                          ? "oznaczone jako mam"
-                          : "nie mam"
-                        : `w pantry: ${fmtQty(it.pantryQty)} ${it.unit}`;
-
-                    return (
-                      <div key={it.ingredient_id} style={{ padding: "10px 0", borderTop: "1px solid #eee" }}>
-                        <div style={{ display: "flex", gap: 12, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }}>
-                          <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", flex: 1 }}>
-                            <input
-                              type="checkbox"
-                              checked={done}
-                              disabled={disabled}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                const qty = safeNumber((inputQty.get(it.ingredient_id) ?? qtyStr) || "");
-                                toggleBoughtAndTransfer(it.ingredient_id, checked, qty);
-                              }}
-                              style={{ marginTop: 4 }}
-                            />
-                            <div>
-                              <div style={{ fontWeight: 800 }}>
-                                {it.name} <span style={{ opacity: 0.6 }}>#{it.ingredient_id}</span>
-                              </div>
-                              <div style={{ opacity: 0.8, fontSize: 13, marginTop: 2 }}>
-                                potrzebne: <b>{fmtQty(it.needed)}</b> {it.unit} - {pantryFlag}
-                              </div>
-                              <div style={{ opacity: 0.85, fontSize: 13, marginTop: 2 }}>
-                                do kupienia: <b>{fmtQty(it.toBuy)}</b> {it.unit}
-                              </div>
-                            </div>
-                          </label>
-
-                          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                              <span style={{ opacity: 0.75, fontSize: 12 }}>Ilość do pantry</span>
+                        return (
+                          <div
+                            key={it.ingredient_id}
+                            className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <label className="flex flex-1 items-start gap-3 text-sm">
                               <input
-                                value={currentInput}
+                                type="checkbox"
+                                checked={done}
                                 disabled={disabled}
                                 onChange={(e) => {
-                                  const v = e.target.value;
-                                  setInputQty((prev) => {
-                                    const next = new Map(prev);
-                                    next.set(it.ingredient_id, v);
-                                    return next;
-                                  });
+                                  const checked = e.target.checked;
+                                  const qty = safeNumber((inputQty.get(it.ingredient_id) ?? qtyStr) || "");
+                                  toggleBoughtAndTransfer(it.ingredient_id, checked, qty);
                                 }}
-                                placeholder={it.toBuy > 0 ? fmtQty(it.toBuy) : ""}
-                                style={{ width: 140, padding: 8 }}
+                                className="mt-1 h-4 w-4"
                               />
-                            </div>
+                              <div className="space-y-1">
+                                <div className="font-semibold text-slate-900">
+                                  {it.name} <span className="text-xs text-slate-400">#{it.ingredient_id}</span>
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  potrzebne: <b className="text-slate-900">{fmtQty(it.needed)}</b> {it.unit} • {pantryFlag}
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  do kupienia: <b className="text-slate-900">{fmtQty(it.toBuy)}</b> {it.unit}
+                                </div>
+                              </div>
+                            </label>
 
-                            <button
-                              disabled={disabled}
-                              onClick={async () => {
-                                setBusyIds((prev) => new Set(prev).add(it.ingredient_id));
-                                try {
-                                  const parsedQty = safeNumber(currentInput || "");
-                                  const transferQty = parsedQty ?? it.toBuy;
-                                  if (transferQty > 0) {
-                                    await addToPantry(it.ingredient_id, transferQty);
+                            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[11px] uppercase tracking-wide text-slate-400">Ilość do pantry</span>
+                                <input
+                                  value={currentInput}
+                                  disabled={disabled}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setInputQty((prev) => {
+                                      const next = new Map(prev);
+                                      next.set(it.ingredient_id, v);
+                                      return next;
+                                    });
+                                  }}
+                                  placeholder={it.toBuy > 0 ? fmtQty(it.toBuy) : ""}
+                                  className="input w-full sm:w-32"
+                                />
+                              </div>
+
+                              <button
+                                disabled={disabled}
+                                onClick={async () => {
+                                  setBusyIds((prev) => new Set(prev).add(it.ingredient_id));
+                                  try {
+                                    const parsedQty = safeNumber(currentInput || "");
+                                    const transferQty = parsedQty ?? it.toBuy;
+                                    if (transferQty > 0) {
+                                      await addToPantry(it.ingredient_id, transferQty);
+                                    }
+                                  } finally {
+                                    setBusyIds((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(it.ingredient_id);
+                                      return next;
+                                    });
                                   }
-                                } finally {
-                                  setBusyIds((prev) => {
-                                    const next = new Set(prev);
-                                    next.delete(it.ingredient_id);
-                                    return next;
-                                  });
-                                }
-                              }}
-                              title="Przenieś do pantry (bez odhaczania)"
-                            >
-                              Do pantry
-                            </button>
+                                }}
+                                title="Przenieś do pantry (bez odhaczania)"
+                                className="btn btn-secondary text-xs"
+                              >
+                                Do pantry
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </section>
+                        );
+                      })}
+                    </div>
+                  </details>
+                );
+              })
+            )}
+          </section>
 
-      {/* EXTRA / RĘCZNE */}
-      <section style={{ marginTop: 22, border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 800, marginBottom: 8 }}>Dodatkowe zakupy (poza bazą)</h2>
+          <section className="card space-y-3">
+            <h2 className="section-title">Dodatkowe zakupy (poza bazą)</h2>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <input
-            value={extraName}
-            onChange={(e) => setExtraName(e.target.value)}
-            placeholder="np. papier toaletowy"
-            style={{ padding: 10, minWidth: 260, flex: 1 }}
-          />
-          <button onClick={addExtra} disabled={!plan || !extraName.trim()}>
-            Dodaj
-          </button>
-        </div>
-
-        <div style={{ marginTop: 12 }}>
-          {extras.length === 0 ? (
-            <p style={{ opacity: 0.8, margin: 0 }}>Brak dodatkowych pozycji.</p>
-          ) : (
-            <div style={{ display: "grid", gap: 8 }}>
-              {extras.map((x) => (
-                <div
-                  key={x.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 10,
-                    alignItems: "center",
-                    borderTop: "1px solid #eee",
-                    paddingTop: 10,
-                  }}
-                >
-                  <label style={{ display: "flex", gap: 10, alignItems: "center", cursor: "pointer", flex: 1 }}>
-                    <input
-                      type="checkbox"
-                      checked={x.done}
-                      onChange={(e) => toggleExtraDone(x.id, e.target.checked)}
-                    />
-                    <span style={{ fontWeight: 700 }}>{x.name}</span>
-                  </label>
-
-                  <button onClick={() => deleteExtra(x.id)} title="Usuń">
-                    Usuń
-                  </button>
-                </div>
-              ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={extraName}
+                onChange={(e) => setExtraName(e.target.value)}
+                placeholder="np. papier toaletowy"
+                className="input flex-1"
+              />
+              <button onClick={addExtra} disabled={!plan || !extraName.trim()} className="btn btn-primary">
+                Dodaj
+              </button>
             </div>
-          )}
+
+            <div className="space-y-2">
+              {extras.length === 0 ? (
+                <p className="text-sm text-slate-500">Brak dodatkowych pozycji.</p>
+              ) : (
+                extras.map((x) => (
+                  <div key={x.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                    <label className="flex items-center gap-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={x.done}
+                        onChange={(e) => toggleExtraDone(x.id, e.target.checked)}
+                        className="h-4 w-4"
+                      />
+                      <span className="font-semibold text-slate-900">{x.name}</span>
+                    </label>
+
+                    <button onClick={() => deleteExtra(x.id)} title="Usuń" className="btn btn-secondary text-xs">
+                      Usuń
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
         </div>
-      </section>
+
+        <aside className="hidden lg:block">
+          <div className="card sticky top-6">{plansPanel}</div>
+        </aside>
       </div>
 
-      <aside
-        style={{
-          width: 340,
-          position: "sticky",
-          top: 16,
-          alignSelf: "flex-start",
-          border: "1px solid #ddd",
-          borderRadius: 12,
-          padding: 12,
-          background: "white",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>Moje jadłospisy</h2>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <button
-              onClick={() => setSelectedPlanIds(new Set(allPlans.map((pl) => pl.id)))}
-              disabled={allPlans.length === 0 || selectedPlanIds.size === allPlans.length}
-              style={{ fontSize: 12, padding: "6px 8px" }}
-            >
-              Zaznacz wszystkie
-            </button>
-            <button
-              onClick={() => setSelectedPlanIds(new Set())}
-              disabled={selectedPlanIds.size === 0}
-              style={{ fontSize: 12, padding: "6px 8px" }}
-            >
-              Wyczyść
-            </button>
-            <button
-              onClick={transferAllToPantry}
-              disabled={computedItems.length === 0 || bulkTransferBusy}
-              style={{ fontSize: 12, padding: "6px 8px" }}
-            >
-              {bulkTransferLabel}
-            </button>
-            <button
-              onClick={() => deleteAllExtras()}
-              disabled={extras.length === 0 || bulkExtrasBusy}
-              style={{ fontSize: 12, padding: "6px 8px" }}
-            >
-              {bulkExtrasLabel}
-            </button>
+      <MobileDrawer open={plansDrawerOpen} onClose={() => setPlansDrawerOpen(false)} title="Wybierz plany" side="bottom">
+        {plansPanel}
+      </MobileDrawer>
+
+      <div className="fixed bottom-16 left-0 right-0 z-30 lg:hidden">
+        <div className="mx-auto max-w-6xl px-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-lg">
+            <div className="grid grid-cols-2 gap-2">{bulkActionButtons}</div>
           </div>
         </div>
-
-        <div style={{ marginTop: 10, maxHeight: "70vh", overflowY: "auto", display: "grid", gap: 8 }}>
-          {allPlans.length === 0 ? (
-            <div style={{ opacity: 0.8 }}>Brak planów.</div>
-          ) : (
-            allPlans.map((pl) => {
-              const checked = selectedPlanIds.has(pl.id);
-
-              return (
-                <label
-                  key={pl.id}
-                  style={{
-                    display: "flex",
-                    gap: 10,
-                    alignItems: "flex-start",
-                    border: "1px solid #eee",
-                    borderRadius: 10,
-                    padding: 10,
-                    cursor: "pointer",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      setSelectedPlanIds((prev) => {
-                        const next = new Set(prev);
-                        if (isChecked) next.add(pl.id);
-                        else next.delete(pl.id);
-                        return next;
-                      });
-                    }}
-                    style={{ marginTop: 2 }}
-                  />
-                  <div>
-                    <div style={{ fontWeight: 800 }}>{planLabel(pl)}</div>
-                    <div style={{ opacity: 0.75, fontSize: 12 }}>
-                      start: {pl.start_date} - dni: {pl.days_count}
-                    </div>
-                  </div>
-                </label>
-              );
-            })
-          )}
-        </div>
-      </aside>
-    </div>
-  </main>
+      </div>
+    </main>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-

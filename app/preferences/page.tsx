@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 type Pref = "favorite" | "dislike";
@@ -396,104 +395,80 @@ export default function PreferencesPage() {
 
   if (loading) {
     return (
-      <main style={{ maxWidth: 980, margin: "20px auto", padding: 16 }}>
-        <p>Ładowanie…</p>
+      <main className="card">
+        <p className="text-sm text-slate-600">Ładowanie…</p>
       </main>
     );
   }
 
   return (
-    <main style={{ maxWidth: 980, margin: "20px auto", padding: 16 }}>
-      <header style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800 }}>Preferencje przepisów</h1>
-          <p style={{ opacity: 0.8, marginTop: 6 }}>
-            Tu cofasz 🚫 i zarządzasz ⭐. Generator i “Zamień” w jadłospisie biorą to pod uwagę.
-          </p>
-        </div>
-
-        <nav style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <Link href="/meal-plan">Jadłospis</Link>
-          <Link href="/shopping-list">Zakupy</Link>
-          <Link href="/recipes">Przepisy</Link>
-          <Link href="/pantry">Pantry</Link>
-        </nav>
+    <main className="space-y-6">
+      <header className="space-y-2">
+        <h1 className="text-2xl font-semibold text-slate-900">Preferencje przepisów</h1>
+        <p className="text-sm text-slate-600">
+          Tu cofasz 🚫 i zarządzasz ⭐. Generator i „Zamień” w jadłospisie biorą to pod uwagę.
+        </p>
       </header>
 
-      <section style={{ marginTop: 12, border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <button onClick={() => setFilter("all")} disabled={filter === "all"}>
+      <section className="card space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => setFilter("all")} disabled={filter === "all"} className="btn btn-secondary text-xs">
             Wszystkie ({counts.all})
           </button>
-          <button onClick={() => setFilter("favorite")} disabled={filter === "favorite"}>
+          <button
+            onClick={() => setFilter("favorite")}
+            disabled={filter === "favorite"}
+            className="btn btn-secondary text-xs"
+          >
             ⭐ Ulubione ({counts.favorite})
           </button>
-          <button onClick={() => setFilter("dislike")} disabled={filter === "dislike"}>
+          <button
+            onClick={() => setFilter("dislike")}
+            disabled={filter === "dislike"}
+            className="btn btn-secondary text-xs"
+          >
             🚫 Blacklista ({counts.dislike})
           </button>
-
-          <div style={{ flex: 1 }} />
-
+          <div className="flex-1" />
           <input
             placeholder="Szukaj po nazwie / ID / typie (breakfast/lunch/dinner)"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            style={{ padding: 10, minWidth: 280, maxWidth: 420, width: "100%" }}
+            className="input min-w-[220px]"
           />
         </div>
 
-        <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={clearDislikes} disabled={counts.dislike === 0}>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+          <button onClick={clearDislikes} disabled={counts.dislike === 0} className="btn btn-secondary text-xs">
             Usuń całą blacklistę 🚫
           </button>
-          <span style={{ opacity: 0.75, fontSize: 13 }}>
-            Tip: w jadłospisie swipe w prawo dodaje 🚫 i od razu podmienia przepis.
-          </span>
+          <span>Tip: w jadłospisie swipe w prawo dodaje 🚫 i od razu podmienia przepis.</span>
         </div>
       </section>
 
       {/* Manual test: zablokuj "mleko", wygeneruj plan i sprawdź brak przepisów z mlekiem; potem usuń blokadę. */}
-      <section style={{ marginTop: 12, border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700 }}>Zablokowane produkty</h2>
-        <p style={{ opacity: 0.75, marginTop: 6, fontSize: 13 }}>
-          Produkty na tej liście wykluczają przepisy z generatora jadłospisu i zamiany swipe.
-        </p>
+      <section className="card space-y-3">
+        <div>
+          <h2 className="section-title">Zablokowane produkty</h2>
+          <p className="text-xs text-slate-500">
+            Produkty na tej liście wykluczają przepisy z generatora jadłospisu i zamiany swipe.
+          </p>
+        </div>
+
         {blockedLoadError && (
-          <div
-            style={{
-              marginTop: 8,
-              border: "1px solid #f2c94c",
-              borderRadius: 10,
-              padding: 10,
-              background: "#fff9db",
-              fontSize: 13,
-            }}
-          >
-            <b>Blad wczytywania blokad:</b> {blockedLoadError}
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            <b>Błąd wczytywania blokad:</b> {blockedLoadError}
           </div>
         )}
         {blockedActionError && (
-          <div
-            style={{
-              marginTop: 8,
-              border: "1px solid #fecaca",
-              borderRadius: 10,
-              padding: 10,
-              background: "#fef2f2",
-              fontSize: 13,
-            }}
-          >
-            <b>Blad akcji:</b> {blockedActionError}
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+            <b>Błąd akcji:</b> {blockedActionError}
           </div>
         )}
-        {blockedNotice && (
-          <div style={{ marginTop: 8, fontSize: 13, color: "#065f46" }}>{blockedNotice}</div>
-        )}
+        {blockedNotice && <div className="text-xs text-emerald-700">{blockedNotice}</div>}
 
-        <div style={{ position: "relative", marginTop: 10 }}>
-          <label style={{ display: "block", marginBottom: 6, fontWeight: 700 }}>
-            Dodaj produkt do blokady (autocomplete)
-          </label>
+        <div className="relative">
+          <label className="block text-sm font-semibold text-slate-700">Dodaj produkt do blokady (autocomplete)</label>
           <input
             value={blockedQuery}
             onChange={(e) => {
@@ -505,43 +480,22 @@ export default function PreferencesPage() {
             onFocus={() => setBlockedSuggestOpen(true)}
             onBlur={() => setTimeout(() => setBlockedSuggestOpen(false), 150)}
             placeholder="Wpisz min. 2 litery, np. mleko"
-            style={{ padding: 10, width: "100%" }}
+            className="input mt-2"
           />
 
           {blockedSuggestOpen && blockedSuggestions.length > 0 && (
-            <div
-              style={{
-                position: "absolute",
-                zIndex: 40,
-                left: 0,
-                right: 0,
-                top: "100%",
-                marginTop: 6,
-                border: "1px solid #ddd",
-                borderRadius: 10,
-                background: "white",
-                overflow: "hidden",
-              }}
-            >
+            <div className="absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
               {blockedSuggestions.map((ing) => (
                 <button
                   key={ing.id}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => selectBlockedIngredient(ing)}
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    padding: 10,
-                    border: "none",
-                    background: "white",
-                    cursor: "pointer",
-                    borderBottom: "1px solid #eee",
-                  }}
+                  className="w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-slate-50"
                   title={`Dodaj #${ing.id}`}
                 >
-                  <div style={{ fontWeight: 700 }}>{ing.name}</div>
-                  <div style={{ opacity: 0.7, fontSize: 12 }}>
-                    {ing.category ?? "bez kategorii"} - jednostka: {ing.unit} - ID: {ing.id}
+                  <div className="font-semibold text-slate-900">{ing.name}</div>
+                  <div className="text-xs text-slate-500">
+                    {ing.category ?? "bez kategorii"} • jednostka: {ing.unit} • ID: {ing.id}
                   </div>
                 </button>
               ))}
@@ -549,7 +503,7 @@ export default function PreferencesPage() {
           )}
         </div>
 
-        <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={addBlockedIngredient}
             disabled={
@@ -557,60 +511,53 @@ export default function PreferencesPage() {
               blockedAddBusy ||
               (blockedSelectedId !== null && blockedIngredientIds.has(blockedSelectedId))
             }
+            className="btn btn-primary"
           >
-            {blockedAddBusy ? "Dodaje..." : "Dodaj do blokady"}
+            {blockedAddBusy ? "Dodaję..." : "Dodaj do blokady"}
           </button>
           {blockedSelected && (
-            <span style={{ opacity: 0.75, fontSize: 12 }}>
+            <span className="text-xs text-slate-500">
               Wybrano: {blockedSelected.name} (ID: {blockedSelected.id})
             </span>
           )}
           {blockedSelectedId === null && blockedQuery.trim().length > 0 && (
-            <span style={{ opacity: 0.75, fontSize: 12 }}>Wybierz produkt z listy.</span>
+            <span className="text-xs text-slate-500">Wybierz produkt z listy.</span>
           )}
         </div>
 
-        <div style={{ marginTop: 12 }}>
+        <div className="space-y-2">
           {blockedItems.length === 0 ? (
-            <p style={{ opacity: 0.75, margin: 0 }}>Brak zablokowanych produktów.</p>
+            <p className="text-sm text-slate-500">Brak zablokowanych produktów.</p>
           ) : (
-            <div style={{ display: "grid", gap: 8 }}>
-              {blockedItems.map((ing) => (
-                <div
-                  key={ing.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 10,
-                    borderTop: "1px solid #eee",
-                    paddingTop: 10,
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 700 }}>{ing.name}</div>
-                    <div style={{ opacity: 0.7, fontSize: 12 }}>
-                      {ing.category ?? "bez kategorii"} - jednostka: {ing.unit || "-"} - ID: {ing.id}
-                    </div>
+            blockedItems.map((ing) => (
+              <div
+                key={ing.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3"
+              >
+                <div>
+                  <div className="font-semibold text-slate-900">{ing.name}</div>
+                  <div className="text-xs text-slate-500">
+                    {ing.category ?? "bez kategorii"} • jednostka: {ing.unit || "-"} • ID: {ing.id}
                   </div>
-                  <button
-                    onClick={() => removeBlockedIngredient(ing.id)}
-                    disabled={blockedRemoveIds.has(ing.id)}
-                  >
-                    {blockedRemoveIds.has(ing.id) ? "Usuwam..." : "Usuń"}
-                  </button>
                 </div>
-              ))}
-            </div>
+                <button
+                  onClick={() => removeBlockedIngredient(ing.id)}
+                  disabled={blockedRemoveIds.has(ing.id)}
+                  className="btn btn-secondary text-xs"
+                >
+                  {blockedRemoveIds.has(ing.id) ? "Usuwam..." : "Usuń"}
+                </button>
+              </div>
+            ))
           )}
         </div>
       </section>
 
-      <section style={{ marginTop: 16 }}>
+      <section className="space-y-3">
         {filtered.length === 0 ? (
-          <p style={{ opacity: 0.85 }}>Brak wyników.</p>
+          <p className="text-sm text-slate-500">Brak wyników.</p>
         ) : (
-          <div style={{ display: "grid", gap: 10 }}>
+          <div className="grid gap-3">
             {filtered.map((it) => {
               const rec = it.recipe;
               const name = rec?.name ?? `Przepis #${it.recipe_id}`;
@@ -618,40 +565,39 @@ export default function PreferencesPage() {
               const busy = busyIds.has(it.recipe_id);
 
               return (
-                <div
-                  key={it.recipe_id}
-                  style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div key={it.recipe_id} className="card">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div style={{ fontWeight: 800 }}>
-                        {name} <span style={{ opacity: 0.6 }}>#{it.recipe_id}</span>
+                      <div className="font-semibold text-slate-900">
+                        {name} <span className="text-xs text-slate-400">#{it.recipe_id}</span>
                       </div>
-                      <div style={{ opacity: 0.8, fontSize: 13 }}>
-                        typ: <b>{mt}</b> • status:{" "}
-                        <b>{it.preference === "favorite" ? "⭐ ulubione" : "🚫 blacklista"}</b>
+                      <div className="text-xs text-slate-500">
+                        typ: <b className="text-slate-900">{mt}</b> • status:{" "}
+                        <b className="text-slate-900">
+                          {it.preference === "favorite" ? "⭐ ulubione" : "🚫 blacklista"}
+                        </b>
                       </div>
                     </div>
 
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      {/* toggle favorite */}
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         disabled={busy}
                         onClick={() =>
                           setPreference(it.recipe_id, it.preference === "favorite" ? null : "favorite")
                         }
                         title="Ustaw/usuń ulubione"
+                        className="btn btn-secondary text-xs"
                       >
                         {it.preference === "favorite" ? "⭐ Usuń" : "☆ Ulubione"}
                       </button>
 
-                      {/* toggle dislike */}
                       <button
                         disabled={busy}
                         onClick={() =>
                           setPreference(it.recipe_id, it.preference === "dislike" ? null : "dislike")
                         }
                         title="Ustaw/usuń blacklistę"
+                        className="btn btn-secondary text-xs"
                       >
                         {it.preference === "dislike" ? "🚫 Cofnij" : "🚫 Blacklista"}
                       </button>

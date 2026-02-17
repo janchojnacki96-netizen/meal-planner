@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -212,22 +212,25 @@ export default function PantryPage() {
   }
 
   return (
-    <main style={{ maxWidth: 820, margin: "20px auto", padding: 16 }}>
-      <header style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+    <main className="space-y-6">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Pantry â€” Mam w domu</h1>
-          <p style={{ opacity: 0.8 }}>
-            Dodaj produkty do pantry i edytuj ich ilosc. Wyswietlamy tylko produkty juz dodane.
+          <h1 className="text-2xl font-semibold text-slate-900">Pantry</h1>
+          <p className="text-sm text-slate-600">
+            Dodaj produkty do pantry i edytuj ich ilość. Wyświetlamy tylko produkty już dodane.
           </p>
         </div>
-        <button onClick={signOut}>Wyloguj</button>
+        <button onClick={signOut} className="btn btn-secondary">
+          Wyloguj
+        </button>
       </header>
-      <section style={{ marginTop: 12, border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-        <div style={{ fontWeight: 700 }}>Dodaj produkt</div>
-        <div style={{ position: "relative", marginTop: 8 }}>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+
+      <section className="card space-y-3">
+        <div className="section-title">Dodaj produkt</div>
+        <div className="relative">
+          <div className="flex flex-wrap items-center gap-2">
             <input
-              placeholder="Wpisz nazwe produktu..."
+              placeholder="Wpisz nazwę produktu..."
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
@@ -237,146 +240,105 @@ export default function PantryPage() {
               }}
               onFocus={() => setSuggestOpen(true)}
               onBlur={() => setTimeout(() => setSuggestOpen(false), 150)}
-              style={{ flex: 1, minWidth: 220, padding: 10 }}
+              className="input flex-1"
             />
             <button
               type="button"
               onClick={clearSearch}
               disabled={!query && selectedIngredientId === null}
-              style={{ padding: "8px 12px" }}
+              className="btn btn-secondary"
             >
-              X
+              Wyczyść
             </button>
             <button
               type="button"
               onClick={addSelectedIngredient}
               disabled={selectedIngredientId === null || addBusy}
-              style={{ padding: "8px 12px" }}
+              className="btn btn-primary"
             >
               Dodaj
             </button>
           </div>
 
           {suggestOpen && suggestions.length > 0 && (
-            <div
-              style={{
-                position: "absolute",
-                zIndex: 10,
-                left: 0,
-                right: 0,
-                top: "100%",
-                marginTop: 6,
-                border: "1px solid #ddd",
-                borderRadius: 10,
-                background: "white",
-                overflow: "hidden",
-              }}
-            >
+            <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
               {suggestions.map((ing) => (
                 <button
                   key={ing.id}
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => selectSuggestion(ing)}
-                  style={{
-                    width: "100%",
-                    textAlign: "left",
-                    padding: 10,
-                    border: "none",
-                    background: "white",
-                    cursor: "pointer",
-                    borderBottom: "1px solid #eee",
-                  }}
+                  className="w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-slate-50"
                 >
-                  <div style={{ fontWeight: 700 }}>{ing.name}</div>
-                  <div style={{ opacity: 0.7, fontSize: 12 }}>
-                    #{ing.id} - unit: {ing.unit}
-                  </div>
+                  <div className="font-semibold text-slate-900">{ing.name}</div>
+                  <div className="text-xs text-slate-500">#{ing.id} • jednostka: {ing.unit}</div>
                 </button>
               ))}
             </div>
           )}
         </div>
-        {addMsg && <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>{addMsg}</div>}
+        {addMsg && <div className="text-xs text-slate-500">{addMsg}</div>}
       </section>
 
       {loading ? (
-        <p style={{ marginTop: 16 }}>Ladowanie...</p>
+        <p className="text-sm text-slate-500">Ładowanie...</p>
       ) : pantryItems.length === 0 ? (
-        <p style={{ marginTop: 16, opacity: 0.8 }}>Brak produktow w pantry. Dodaj pierwszy produkt powyzej.</p>
+        <p className="text-sm text-slate-500">Brak produktów w pantry. Dodaj pierwszy produkt powyżej.</p>
       ) : (
-        <ul style={{ listStyle: "none", padding: 0, marginTop: 12, display: "grid", gap: 8 }}>
+        <ul className="grid gap-3">
           {pantryItems.map((item) => {
             const ing = item.ingredient;
             const qty = item.quantity;
             const disabled = busyIds.has(ing.id);
 
             return (
-              <li
-                key={ing.id}
-                style={{
-                  border: "1px solid #ddd",
-                  borderRadius: 10,
-                  padding: 10,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600 }}>
-                    {ing.name} <span style={{ opacity: 0.6 }}>#{ing.id}</span>
+              <li key={ing.id} className="card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <div className="font-semibold text-slate-900">
+                    {ing.name} <span className="text-xs text-slate-400">#{ing.id}</span>
                   </div>
-                  <div style={{ opacity: 0.75, fontSize: 13 }}>
-                    {ing.category ?? ""} - unit: {ing.unit}
-                  </div>
+                  <div className="text-xs text-slate-500">{ing.category ?? ""} • jednostka: {ing.unit}</div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="ilosc"
-                      value={qty === null ? "" : String(qty)}
-                      disabled={disabled}
-                      onChange={(e) => {
-                        const v = e.target.value;
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="ilość"
+                    value={qty === null ? "" : String(qty)}
+                    disabled={disabled}
+                    onChange={(e) => {
+                      const v = e.target.value;
 
-                        setPantry((prev) => {
-                          const next = new Map(prev);
-                          if (!next.has(ing.id)) return next;
+                      setPantry((prev) => {
+                        const next = new Map(prev);
+                        if (!next.has(ing.id)) return next;
 
-                          if (v.trim() === "") {
-                            next.set(ing.id, { ingredient_id: ing.id, quantity: null });
-                            return next;
-                          }
-
-                          const n = Number(v.replace(",", "."));
-                          if (!Number.isFinite(n) || n < 0) return next;
-
-                          next.set(ing.id, { ingredient_id: ing.id, quantity: n });
+                        if (v.trim() === "") {
+                          next.set(ing.id, { ingredient_id: ing.id, quantity: null });
                           return next;
-                        });
-                      }}
-                      onBlur={(e) => saveQuantity(ing.id, e.target.value)}
-                      style={{ width: 90, padding: 6 }}
-                    />
-                    <span style={{ opacity: 0.8 }}>{ing.unit}</span>
-                  </div>
+                        }
 
-                  <button onClick={() => removeFromPantry(ing.id)} disabled={disabled}>
-                    Usun
+                        const n = Number(v.replace(",", "."));
+                        if (!Number.isFinite(n) || n < 0) return next;
+
+                        next.set(ing.id, { ingredient_id: ing.id, quantity: n });
+                        return next;
+                      });
+                    }}
+                    onBlur={(e) => saveQuantity(ing.id, e.target.value)}
+                    className="input w-full sm:w-28"
+                  />
+                  <span className="text-xs text-slate-500">{ing.unit}</span>
+                  <button onClick={() => removeFromPantry(ing.id)} disabled={disabled} className="btn btn-secondary text-xs">
+                    Usuń
                   </button>
                 </div>
               </li>
             );
           })}
         </ul>
-      )}</main>
+      )}
+    </main>
   );
 }
-
-
-

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { buildPlanVersionMap, formatPlanLabel } from "@/lib/plans";
 import { useSwipeable } from "react-swipeable";
+import MobileDrawer from "@/components/MobileDrawer";
 
 type MealType = "breakfast" | "lunch" | "dinner";
 type Pref = "favorite" | "dislike";
@@ -178,47 +179,30 @@ function MealSlotRow(props: {
   return (
     <div
       {...swipeHandlers}
-      style={{
-        padding: "10px 0",
-        borderTop: "1px solid #eee",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "stretch",
-        gap: 10,
-        userSelect: "none",
-      }}
+      className="card space-y-3"
       title="Swipe: lewo = zamień, prawo = 🚫 nie lubię + zamień"
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 10,
-          alignItems: "center",
-        }}
-      >
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700 }}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-slate-900">
             {label}:{" "}
-            <span style={{ fontWeight: 600 }}>
+            <span className="font-medium text-slate-700">
               {isLeftovers ? `Resztki: ${title}` : title}
             </span>
           </div>
-          {slot?.recipe_id && (
-            <div style={{ opacity: 0.7, fontSize: 13 }}>recipe_id: {slot.recipe_id}</div>
-          )}
+          {slot?.recipe_id && <div className="text-xs text-slate-500">recipe_id: {slot.recipe_id}</div>}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ opacity: 0.8 }}>porcje</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs">
+            <span className="text-slate-500">porcje</span>
             <input
               type="number"
               min={0}
               value={slot?.servings ?? 0}
               disabled={!slot}
               onChange={(e) => slot && onUpdateServings(slot.id, Number(e.target.value))}
-              style={{ width: 80, padding: 6 }}
+              className="w-16 bg-transparent text-sm font-semibold text-slate-900 focus:outline-none"
             />
           </div>
 
@@ -226,6 +210,7 @@ function MealSlotRow(props: {
             disabled={!slot || isLeftovers || isSwapping || searchDisabled}
             onClick={() => slot && onOpenSearch(slot)}
             title="Wybierz przepis"
+            className="btn btn-secondary"
           >
             🔎
           </button>
@@ -234,6 +219,7 @@ function MealSlotRow(props: {
             disabled={!slot || !slot.recipe_id || isLeftovers || isSwapping}
             onClick={() => slot && onReplace(slot)}
             title="Zamień przepis"
+            className="btn btn-secondary"
           >
             {isSwapping ? "Zmieniam…" : "Zamień"}
           </button>
@@ -242,6 +228,7 @@ function MealSlotRow(props: {
             disabled={!slot || !slot.recipe_id || isLeftovers || isSwapping}
             onClick={() => slot && onDislikeAndReplace(slot)}
             title="Nie lubię (blacklista) + zamień"
+            className="btn btn-secondary"
           >
             🚫
           </button>
@@ -250,6 +237,7 @@ function MealSlotRow(props: {
             disabled={!slot || !slot.recipe_id || isLeftovers || isSwapping}
             onClick={() => slot && onToggleFavorite(slot)}
             title="Ulubione (bonus przy wyborze)"
+            className="btn btn-secondary"
           >
             {pref === "favorite" ? "⭐" : "☆"}
           </button>
@@ -258,6 +246,7 @@ function MealSlotRow(props: {
             disabled={!recipeId || (steps.length === 0 && ingredientRows.length === 0)}
             onClick={() => setOpen((v) => !v)}
             title="Pokaż / ukryj szczegóły"
+            className="btn btn-secondary"
           >
             {open ? "Zwiń ▲" : "Kroki ▼"}
           </button>
@@ -265,16 +254,8 @@ function MealSlotRow(props: {
       </div>
 
       {searchOpen && slot && !isLeftovers && (
-        <div
-          style={{
-            marginTop: 8,
-            border: "1px solid #ddd",
-            borderRadius: 10,
-            padding: 10,
-            background: "white",
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Wybierz przepis</div>
+        <div className="card-muted space-y-3">
+          <div className="text-sm font-semibold text-slate-900">Wybierz przepis</div>
           <input
             value={searchQuery}
             onChange={(e) => onSearchQueryChange(e.target.value)}
@@ -282,47 +263,32 @@ function MealSlotRow(props: {
               if (e.key === "Escape") onCloseSearch();
             }}
             placeholder="Wpisz min. 2 litery"
-            style={{ padding: 8, width: "100%" }}
+            className="input"
           />
-          <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-            <button onClick={onCloseSearch} disabled={searchBusy}>
+          <div className="flex gap-2">
+            <button onClick={onCloseSearch} disabled={searchBusy} className="btn btn-secondary">
               Anuluj
             </button>
           </div>
-          <div style={{ marginTop: 8 }}>
+          <div>
             {searchQuery.trim().length < 2 ? (
-              <div style={{ opacity: 0.7, fontSize: 13 }}>Wpisz min. 2 litery.</div>
+              <div className="text-xs text-slate-500">Wpisz min. 2 litery.</div>
             ) : searchResults.length === 0 ? (
-              <div style={{ opacity: 0.7, fontSize: 13 }}>
+              <div className="text-xs text-slate-500">
                 Brak pasujących przepisów (sprawdź blokady, cooldown lub duplikaty).
               </div>
             ) : (
-              <div
-                style={{
-                  border: "1px solid #eee",
-                  borderRadius: 8,
-                  maxHeight: 220,
-                  overflowY: "auto",
-                }}
-              >
+              <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 bg-white">
                 {searchResults.map((rec) => (
                   <button
                     key={rec.id}
                     onClick={() => onSelectSearchRecipe(slot, rec.id)}
                     disabled={searchBusy}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      padding: 8,
-                      border: "none",
-                      background: "white",
-                      cursor: "pointer",
-                      borderBottom: "1px solid #f0f0f0",
-                    }}
+                    className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50"
                     title={`Wybierz #${rec.id}`}
                   >
-                    <div style={{ fontWeight: 600 }}>{rec.name}</div>
-                    <div style={{ opacity: 0.6, fontSize: 12 }}>ID: {rec.id}</div>
+                    <span className="font-semibold text-slate-900">{rec.name}</span>
+                    <span className="text-xs text-slate-500">ID: {rec.id}</span>
                   </button>
                 ))}
               </div>
@@ -332,21 +298,14 @@ function MealSlotRow(props: {
       )}
 
       {open && (steps.length > 0 || ingredientRows.length > 0) && (
-        <div
-          style={{
-            padding: 10,
-            background: "#fafafa",
-            border: "1px solid #eee",
-            borderRadius: 10,
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>
+        <div className="card-muted space-y-3">
+          <div className="text-sm font-semibold text-slate-900">
             Składniki{isLeftovers ? " (resztki)" : ""}
           </div>
           {ingredientRows.length === 0 ? (
-            <div style={{ opacity: 0.75, fontSize: 13 }}>Brak składników w bazie.</div>
+            <div className="text-xs text-slate-500">Brak składników w bazie.</div>
           ) : (
-            <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
               {ingredientRows.map((row) => {
                 const baseAmount = row.amount;
                 let displayAmount: string | null = null;
@@ -363,7 +322,7 @@ function MealSlotRow(props: {
                 const unitText = row.unit ? ` ${row.unit}` : "";
 
                 return (
-                  <li key={row.ingredient_id} style={{ lineHeight: 1.35 }}>
+                  <li key={row.ingredient_id} className="leading-relaxed">
                     {row.name} — {amountText}
                     {unitText}
                   </li>
@@ -373,16 +332,16 @@ function MealSlotRow(props: {
           )}
 
           {steps.length > 0 && (
-            <>
-              <div style={{ fontWeight: 700, margin: "12px 0 8px" }}>Kroki</div>
-              <ol style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+            <div className="space-y-2">
+              <div className="text-sm font-semibold text-slate-900">Kroki</div>
+              <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-700">
                 {steps.map((step, idx) => (
-                  <li key={idx} style={{ lineHeight: 1.35 }}>
+                  <li key={idx} className="leading-relaxed">
                     {step}
                   </li>
                 ))}
               </ol>
-            </>
+            </div>
           )}
         </div>
       )}
@@ -438,6 +397,7 @@ export default function MealPlanPage() {
   const [swappingSlotIds, setSwappingSlotIds] = useState<Set<string>>(new Set());
   const [openSearchForSlotId, setOpenSearchForSlotId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [plansDrawerOpen, setPlansDrawerOpen] = useState(false);
   const loadedRecipeIdsRef = useRef<Set<number>>(new Set());
 
   // --- mapy ---
@@ -1725,109 +1685,173 @@ export default function MealPlanPage() {
 
   // --- UI derived ---
   const slotsIndexLocal = slotsIndex;
+  const plansPanel = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="section-title">Moje jadłospisy</h2>
+        <button onClick={refreshPlansList} title="Odśwież listę" className="btn btn-secondary text-xs">
+          Odśwież
+        </button>
+      </div>
+
+      <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+        {allPlans.length === 0 ? (
+          <div className="text-sm text-slate-500">Brak planów.</div>
+        ) : (
+          allPlans.map((pl) => {
+            const isActive = pl.id === activePlan?.id;
+
+            return (
+              <div
+                key={pl.id}
+                className={`flex items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 ${
+                  isActive ? "ring-1 ring-slate-900/10" : ""
+                }`}
+              >
+                <button
+                  onClick={() => goToPlan(pl.id)}
+                  className="flex-1 text-left"
+                  title="Kliknij, aby przejść do tego planu"
+                >
+                  <div className="font-semibold text-slate-900">{planLabel(pl)}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    start: {pl.start_date} • dni: {pl.days_count}
+                  </div>
+                </button>
+
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      downloadPlan(pl.id);
+                    }}
+                    title="Pobierz HTML"
+                    className="btn btn-secondary text-xs"
+                  >
+                    ⬇️
+                  </button>
+
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      deletePlan(pl.id);
+                    }}
+                    title="Usuń plan"
+                    className="btn btn-danger text-xs"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
-      <main style={{ maxWidth: 1200, margin: "20px auto", padding: 16 }}>
-        <p>Ładowanie…</p>
+      <main className="card">
+        <p className="text-sm text-slate-600">Ładowanie…</p>
       </main>
     );
   }
 
   return (
-    <main style={{ maxWidth: 1200, margin: "20px auto", padding: 16 }}>
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-        {/* LEWA STRONA */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800 }}>Jadłospis</h1>
+    <main className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Jadłospis</h1>
+          <p className="text-sm text-slate-600">Planowanie posiłków z szybkim podglądem składników.</p>
+        </div>
+        <button onClick={() => setPlansDrawerOpen(true)} className="btn btn-secondary lg:hidden">
+          Plany
+        </button>
+      </div>
 
-          <section style={{ marginTop: 12, border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700 }}>Utwórz nowy plan</h2>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-6">
+          <section className="card space-y-4">
+            <h2 className="section-title">Utwórz nowy plan</h2>
 
-            <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-              <label>
-                Data startu:{" "}
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                Data startu
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="input" />
               </label>
 
-              <label>
-                Liczba dni (1–31):{" "}
+              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                Liczba dni (1–31)
                 <input
                   type="number"
                   min={1}
                   max={31}
                   value={daysCount}
                   onChange={(e) => setDaysCount(Number(e.target.value))}
+                  className="input"
                 />
               </label>
 
-              <label>
-                Liczba osób (domyślne porcje na posiłek):{" "}
+              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                Liczba osób (domyślne porcje na posiłek)
                 <input
                   type="number"
                   min={1}
                   max={20}
                   value={people}
                   onChange={(e) => setPeople(Number(e.target.value))}
+                  className="input"
                 />
               </label>
 
-              <label>
-                Obiad gotuję na ile dni (np. 2 = gotuję raz, potem resztki):{" "}
+              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+                Obiad gotuję na ile dni (np. 2 = gotuję raz, potem resztki)
                 <input
                   type="number"
                   min={1}
                   max={7}
                   value={lunchSpanDays}
                   onChange={(e) => setLunchSpanDays(Number(e.target.value))}
+                  className="input"
                 />
               </label>
 
-              <label>
-                Cooldown (nie powtarzaj przez X dni, 0 = wyłącz):{" "}
+              <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 sm:col-span-2">
+                Cooldown (nie powtarzaj przez X dni, 0 = wyłącz)
                 <input
                   type="number"
                   min={0}
                   max={60}
                   value={cooldownDays}
                   onChange={(e) => setCooldownDays(Number(e.target.value))}
+                  className="input"
                 />
               </label>
 
-              {/* AUTOCOMPLETE */}
-              <div style={{ position: "relative" }}>
-                <label style={{ display: "block", marginBottom: 6, fontWeight: 700 }}>
+              <div className="relative sm:col-span-2">
+                <label className="block text-sm font-semibold text-slate-700">
                   Składniki do wykorzystania (po nazwie)
                 </label>
 
                 {selectedIngredients.length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                  <div className="mt-3 flex flex-wrap gap-2">
                     {selectedIngredients.map((ing) => (
-                      <span
-                        key={ing.id}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          border: "1px solid #ddd",
-                          borderRadius: 999,
-                          padding: "6px 10px",
-                          background: "#fafafa",
-                        }}
-                        title={`#${ing.id} • ${ing.category ?? "bez kategorii"}`}
-                      >
+                      <span key={ing.id} className="chip" title={`#${ing.id} • ${ing.category ?? "bez kategorii"}`}>
                         {ing.name}
                         <button
                           onClick={() => removeSelectedIngredient(ing.id)}
-                          style={{ border: "none", background: "transparent", cursor: "pointer" }}
+                          className="text-xs text-slate-500 hover:text-slate-900"
                           title="Usuń"
                         >
-                          ✕
+                          ✖
                         </button>
                       </span>
                     ))}
 
-                    <button onClick={clearSelectedIngredients} title="Wyczyść">
+                    <button onClick={clearSelectedIngredients} className="btn btn-secondary text-xs">
                       Wyczyść
                     </button>
                   </div>
@@ -1842,42 +1866,21 @@ export default function MealPlanPage() {
                   onFocus={() => setIngredientSuggestOpen(true)}
                   onBlur={() => setTimeout(() => setIngredientSuggestOpen(false), 150)}
                   placeholder="Wpisz min. 2 litery, np. jaj, mle, chle…"
-                  style={{ padding: 10, width: "100%" }}
+                  className="input mt-3"
                 />
 
                 {ingredientSuggestOpen && suggestions.length > 0 && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      zIndex: 50,
-                      left: 0,
-                      right: 0,
-                      top: "100%",
-                      marginTop: 6,
-                      border: "1px solid #ddd",
-                      borderRadius: 10,
-                      background: "white",
-                      overflow: "hidden",
-                    }}
-                  >
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
                     {suggestions.map((ing) => (
                       <button
                         key={ing.id}
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => addSelectedIngredient(ing.id)}
-                        style={{
-                          width: "100%",
-                          textAlign: "left",
-                          padding: 10,
-                          border: "none",
-                          background: "white",
-                          cursor: "pointer",
-                          borderBottom: "1px solid #eee",
-                        }}
+                        className="w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-slate-50"
                         title={`Dodaj • #${ing.id}`}
                       >
-                        <div style={{ fontWeight: 700 }}>{ing.name}</div>
-                        <div style={{ opacity: 0.7, fontSize: 12 }}>
+                        <div className="font-semibold text-slate-900">{ing.name}</div>
+                        <div className="text-xs text-slate-500">
                           {ing.category ?? "bez kategorii"} • jednostka: {ing.unit} • ID: {ing.id}
                         </div>
                       </button>
@@ -1885,199 +1888,128 @@ export default function MealPlanPage() {
                   </div>
                 )}
 
-                <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
-                  <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                  <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
                       checked={useIngredientIdsHard}
                       onChange={(e) => setUseIngredientIdsHard(e.target.checked)}
+                      className="h-4 w-4"
                     />
                     Tryb twardy: wymagaj wszystkich wybranych składników
                   </label>
                 </div>
               </div>
 
-              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <input type="checkbox" checked={preferPantry} onChange={(e) => setPreferPantry(e.target.checked)} />
+              <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={preferPantry}
+                  onChange={(e) => setPreferPantry(e.target.checked)}
+                  className="h-4 w-4"
+                />
                 Preferuj przepisy pasujące do Pantry
               </label>
 
-              <button onClick={createPlan} disabled={busy}>
-                {busy ? "Tworzę…" : "Utwórz plan"}
-              </button>
+              <div className="sm:col-span-2">
+                <button onClick={createPlan} disabled={busy} className="btn btn-primary w-full sm:w-auto">
+                  {busy ? "Tworzę…" : "Utwórz plan"}
+                </button>
+              </div>
             </div>
           </section>
 
-          <section style={{ marginTop: 12, border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700 }}>Sterowanie</h2>
-            <p style={{ opacity: 0.8, margin: 0 }}>
+          <section className="card-muted space-y-2">
+            <h2 className="section-title">Sterowanie</h2>
+            <p className="text-sm text-slate-600">
               Swipe: <b>lewo</b> = zamień • <b>prawo</b> = 🚫 nie lubię + zamień • <b>Kroki ▼</b> = instrukcja.
             </p>
           </section>
 
-          <section style={{ marginTop: 16 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 700 }}>Aktualny plan</h2>
+          <section className="space-y-4">
+            <h2 className="section-title">Aktualny plan</h2>
 
             {!activePlan ? (
-              <p style={{ opacity: 0.85 }}>Nie masz jeszcze planu. Utwórz nowy powyżej.</p>
+              <p className="text-sm text-slate-600">Nie masz jeszcze planu. Utwórz nowy powyżej.</p>
             ) : (
-              <>
-                <p style={{ opacity: 0.8 }}>
-                  Plan: <b>{planLabel(activePlan)}</b> • start: <b>{activePlan.start_date}</b> • dni:{" "}
-                  <b>{activePlan.days_count}</b>
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600">
+                  Plan: <b className="text-slate-900">{planLabel(activePlan)}</b> • start:{" "}
+                  <b className="text-slate-900">{activePlan.start_date}</b> • dni:{" "}
+                  <b className="text-slate-900">{activePlan.days_count}</b>
                 </p>
 
-                <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
+                <div className="grid gap-4">
                   {days.map((date) => (
-                    <div key={date} style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-                      <div style={{ fontWeight: 800, marginBottom: 8 }}>{date}</div>
+                    <section key={date} className="card-muted space-y-3">
+                      <div className="text-sm font-semibold text-slate-900">{date}</div>
 
-                      {(["breakfast", "lunch", "dinner"] as MealType[]).map((mt) => {
-                        const slot = slotsIndexLocal.get(`${date}|${mt}`);
-                        const recipe = slot?.recipe_id ? recipesById.get(slot.recipe_id) : null;
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {(["breakfast", "lunch", "dinner"] as MealType[]).map((mt) => {
+                          const slot = slotsIndexLocal.get(`${date}|${mt}`);
+                          const recipe = slot?.recipe_id ? recipesById.get(slot.recipe_id) : null;
 
-                        const title = recipe ? recipe.name : "Brak przepisu";
-                        const isLeftovers = slot ? slot.servings === 0 : false;
-                        const isSwapping = slot ? swappingSlotIds.has(slot.id) : false;
-                        const isSearchOpen = slot ? openSearchForSlotId === slot.id : false;
-                        const searchResults = slot && isSearchOpen ? getRecipeCandidates(slot, searchQuery) : [];
+                          const title = recipe ? recipe.name : "Brak przepisu";
+                          const isLeftovers = slot ? slot.servings === 0 : false;
+                          const isSwapping = slot ? swappingSlotIds.has(slot.id) : false;
+                          const isSearchOpen = slot ? openSearchForSlotId === slot.id : false;
+                          const searchResults = slot && isSearchOpen ? getRecipeCandidates(slot, searchQuery) : [];
 
-                        const pref = slot?.recipe_id ? (prefs.get(slot.recipe_id) ?? null) : null;
-                        const steps = Array.isArray(recipe?.steps) ? (recipe!.steps as string[]) : [];
-                        const recipeId = recipe ? recipe.id : null;
-                        const ingredientRows = recipeId ? recipeIngredientsByRecipe.get(recipeId) ?? [] : [];
-                        const recipeBaseServings = recipe?.base_servings ?? null;
+                          const pref = slot?.recipe_id ? (prefs.get(slot.recipe_id) ?? null) : null;
+                          const steps = Array.isArray(recipe?.steps) ? (recipe!.steps as string[]) : [];
+                          const recipeId = recipe ? recipe.id : null;
+                          const ingredientRows = recipeId ? recipeIngredientsByRecipe.get(recipeId) ?? [] : [];
+                          const recipeBaseServings = recipe?.base_servings ?? null;
 
-                        return (
-                          <MealSlotRow
-                            key={`${date}|${mt}|${recipeId ?? "none"}`}
-                            slot={slot}
-                            label={mealLabel(mt)}
-                            title={title}
-                            isLeftovers={isLeftovers}
-                            isSwapping={isSwapping}
-                            recipeId={recipeId}
-                            steps={steps}
-                            ingredientRows={ingredientRows}
-                            recipeBaseServings={recipeBaseServings}
-                            onReplace={(s) => replaceSlot(s)}
-                            onDislikeAndReplace={dislikeAndReplace}
-                            onToggleFavorite={toggleFavorite}
-                            pref={pref}
-                            onUpdateServings={updateServings}
-                            onOpenSearch={openSearchPanel}
-                            onCloseSearch={closeSearchPanel}
-                            onSearchQueryChange={setSearchQuery}
-                            onSelectSearchRecipe={async (targetSlot, newRecipeId) => {
-                              const ok = await setSlotRecipe(targetSlot, newRecipeId);
-                              if (ok) closeSearchPanel();
-                            }}
-                            searchOpen={isSearchOpen}
-                            searchQuery={searchQuery}
-                            searchResults={searchResults}
-                            searchBusy={isSwapping}
-                            searchDisabled={!slot || isLeftovers}
-                          />
-                        );
-                      })}
-                    </div>
+                          return (
+                            <MealSlotRow
+                              key={`${date}|${mt}|${recipeId ?? "none"}`}
+                              slot={slot}
+                              label={mealLabel(mt)}
+                              title={title}
+                              isLeftovers={isLeftovers}
+                              isSwapping={isSwapping}
+                              recipeId={recipeId}
+                              steps={steps}
+                              ingredientRows={ingredientRows}
+                              recipeBaseServings={recipeBaseServings}
+                              onReplace={(s) => replaceSlot(s)}
+                              onDislikeAndReplace={dislikeAndReplace}
+                              onToggleFavorite={toggleFavorite}
+                              pref={pref}
+                              onUpdateServings={updateServings}
+                              onOpenSearch={openSearchPanel}
+                              onCloseSearch={closeSearchPanel}
+                              onSearchQueryChange={setSearchQuery}
+                              onSelectSearchRecipe={async (targetSlot, newRecipeId) => {
+                                const ok = await setSlotRecipe(targetSlot, newRecipeId);
+                                if (ok) closeSearchPanel();
+                              }}
+                              searchOpen={isSearchOpen}
+                              searchQuery={searchQuery}
+                              searchResults={searchResults}
+                              searchBusy={isSwapping}
+                              searchDisabled={!slot || isLeftovers}
+                            />
+                          );
+                        })}
+                      </div>
+                    </section>
                   ))}
                 </div>
-              </>
+              </div>
             )}
           </section>
         </div>
 
-        {/* PRAWA STRONA: PANEL */}
-        <aside
-          style={{
-            width: 340,
-            position: "sticky",
-            top: 16,
-            alignSelf: "flex-start",
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            padding: 12,
-            background: "white",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>Moje jadłospisy</h2>
-            <button onClick={refreshPlansList} title="Odśwież listę" style={{ fontSize: 12, padding: "6px 8px" }}>
-              Odśwież
-            </button>
-          </div>
-
-          <div style={{ marginTop: 10, maxHeight: "70vh", overflowY: "auto", display: "grid", gap: 8 }}>
-            {allPlans.length === 0 ? (
-              <div style={{ opacity: 0.8 }}>Brak planów.</div>
-            ) : (
-              allPlans.map((pl) => {
-                const isActive = pl.id === activePlan?.id;
-
-                return (
-                  <div
-                    key={pl.id}
-                    style={{
-                      border: "1px solid #eee",
-                      borderRadius: 10,
-                      padding: 10,
-                      background: isActive ? "#f3f7ff" : "white",
-                      display: "grid",
-                      gridTemplateColumns: "1fr auto",
-                      gap: 10,
-                      alignItems: "start",
-                    }}
-                  >
-                    <button
-                      onClick={() => goToPlan(pl.id)}
-                      style={{
-                        border: "none",
-                        background: "transparent",
-                        textAlign: "left",
-                        padding: 0,
-                        cursor: "pointer",
-                      }}
-                      title="Kliknij, aby przejść do tego planu"
-                    >
-                      <div style={{ fontWeight: 800 }}>{planLabel(pl)}</div>
-                      <div style={{ opacity: 0.75, fontSize: 12, marginTop: 2 }}>
-                        start: {pl.start_date} • dni: {pl.days_count}
-                      </div>
-                    </button>
-
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          downloadPlan(pl.id);
-                        }}
-                        title="Pobierz HTML"
-                        style={{ padding: "6px 8px", fontSize: 12 }}
-                      >
-                        ⬇️
-                      </button>
-
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          deletePlan(pl.id);
-                        }}
-                        title="Usuń plan"
-                        style={{ padding: "6px 8px", fontSize: 12 }}
-                      >
-                        🗑
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+        <aside className="hidden lg:block">
+          <div className="card sticky top-6">{plansPanel}</div>
         </aside>
       </div>
+
+      <MobileDrawer open={plansDrawerOpen} onClose={() => setPlansDrawerOpen(false)} title="Moje jadłospisy" side="bottom">
+        {plansPanel}
+      </MobileDrawer>
     </main>
   );
 }
